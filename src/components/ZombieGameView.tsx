@@ -44,6 +44,7 @@ import {
 } from '../utils/weapon3dBuilder';
 import {
   applyFpsMouseDelta,
+  computeShotSpreadNDC,
   computeZombieReward,
   FPS_MOUSE_SENSITIVITY,
   FPS_PITCH_LIMIT,
@@ -275,6 +276,7 @@ export const ZombieGameView: React.FC<ZombieGameViewProps> = ({
   const [kills, setKills] = useState(0);
   const [wave, setWave] = useState(1);
   const [hitmarker, setHitmarker] = useState<'none' | 'body' | 'crit'>('none');
+  const [sniperScoped, setSniperScoped] = useState(false);
   const [killFeed, setKillFeed] = useState<KillFeedEntry[]>([]);
   const [floatingReward, setFloatingReward] = useState<{ id: number; amount: number; headshot: boolean } | null>(null);
   const [webglError, setWebglError] = useState<string | null>(null);
@@ -318,6 +320,7 @@ export const ZombieGameView: React.FC<ZombieGameViewProps> = ({
     posY: 1.65,
     velY: 0,
     bobTime: 0,
+    isMoving: false,
     nextId: 1,
     gameOver: false,
   });
@@ -377,6 +380,7 @@ export const ZombieGameView: React.FC<ZombieGameViewProps> = ({
     firearmAnimatorRef.current?.cancel();
     setAmmo(nextAmmo);
     setReloading(false);
+    setSniperScoped(false);
     swapWeaponFnRef.current?.(equippedItem);
   }, [equippedItem]);
 
@@ -392,6 +396,7 @@ export const ZombieGameView: React.FC<ZombieGameViewProps> = ({
       st.adsZoom = false;
       st.meleeSwing = 0;
       setReloading(false);
+      setSniperScoped(false);
       soundEngine.playBoltRack(
         resolveWeaponArchetype(primaryItem.weaponClass, primaryItem.weaponName)
       );
@@ -409,6 +414,7 @@ export const ZombieGameView: React.FC<ZombieGameViewProps> = ({
       st.adsZoom = false;
       firearmAnimatorRef.current?.cancel();
       setReloading(false);
+      setSniperScoped(false);
       swapWeaponFnRef.current?.(knifeItem);
       setActiveSlot(2);
     } else {
@@ -920,6 +926,8 @@ export const ZombieGameView: React.FC<ZombieGameViewProps> = ({
     // Initial zombie wave
     for (let i = 0; i < 6; i++) spawnOneZombie();
 
+    let lastScopedUi = false;
+
     resetArenaFnRef.current = () => {
       for (const z of zombies) disposeZombie(z);
       zombies.length = 0;
@@ -929,6 +937,7 @@ export const ZombieGameView: React.FC<ZombieGameViewProps> = ({
       st.wave = 1;
       st.sessionEarned = 0;
       st.gameOver = false;
+      st.isMoving = false;
       st.posX = 0;
       st.posZ = 4;
       st.posY = 1.65;
@@ -946,6 +955,8 @@ export const ZombieGameView: React.FC<ZombieGameViewProps> = ({
       st.muzzleFlashTimer = 0;
       firearmAnimatorRef.current?.cancel();
       muzzleFlashGroup.visible = false;
+      viewModelRig.visible = true;
+      lastScopedUi = false;
       setHp(100);
       setKills(0);
       setWave(1);
@@ -955,6 +966,7 @@ export const ZombieGameView: React.FC<ZombieGameViewProps> = ({
       setGameOver(false);
       setAmmo(combatRef.current.magSize);
       setReloading(false);
+      setSniperScoped(false);
       for (let i = 0; i < 6; i++) spawnOneZombie();
     };
 
@@ -1022,10 +1034,32 @@ export const ZombieGameView: React.FC<ZombieGameViewProps> = ({
       camera.rotation.set(st.pitch, st.yaw, 0);
       camera.updateMatrixWorld(true);
 
-      // Raycast along aim direction (+ slight weapon spread unless ADS sniper)
-      const spreadScale = st.adsZoom ? 0.25 : 1.0;
-      const rx = (Math.random() - 0.5) * prof.spreadRad * spreadScale;
-      const ry = (Math.random() - 0.5) * prof.spreadRad * spreadScale;
+      const moveKeyHeld =
+        keysDown.has('KeyW') ||
+        keysDown.has('z') ||
+        keysDown.has('ArrowUp') ||
+        keysDown.has('KeyS') ||
+        keysDown.has('s') ||
+        keysDown.has('ArrowDown') ||
+        keysDown.has('KeyA') ||
+        keysDown.has('q') ||
+        keysDown.has('ArrowLeft') ||
+        keysDown.has('KeyD') ||
+        keysDown.has('d') ||
+        keysDown.has('ArrowRight');
+      const isPlayerMoving = st.isMoving || moveKeyHeld;
+      const isPlayerAirborne = st.posY > 1.67 || Math.abs(st.velY) > 0.05;
+      const isAimReady = st.adsZoom && !st.reloading && !(firearmAnimatorRef.current?.isBusy());
+      const isScopedSniper = prof.isSniper && isAimReady;
+
+      // AWP scoped stationary -> pinpoint center (0, 0); moving/airborne -> random forward scatter
+      const { rx, ry } = computeShotSpreadNDC({
+        profile: prof,
+        isAiming: isAimReady,
+        isMoving: isPlayerMoving,
+        isAirborne: isPlayerAirborne,
+        aspect: camera.aspect || 16 / 9,
+      });
       raycaster.setFromCamera(new THREE.Vector2(rx, ry), camera);
       raycaster.far = prof.range;
 
@@ -1039,20 +1073,23 @@ export const ZombieGameView: React.FC<ZombieGameViewProps> = ({
       // Bullet tracer, 3D muzzle flash & impact spark for firearms
       if (!prof.isMelee) {
         const muzzleWorldPos = new THREE.Vector3();
-        muzzleAnchor.getWorldPosition(muzzleWorldPos);
-
-        muzzleFlashGroup.visible = true;
-        st.muzzleFlashTimer = prof.suppressed ? 0.032 : 0.052;
-        muzzleFlashGroup.rotation.z = Math.random() * Math.PI * 2;
-        const flashScale = prof.suppressed
-          ? 0.42
-          : prof.isSniper
-          ? 1.35
-          : prof.archetype === 'pistolet'
-          ? 0.78
-          : 1.0;
-        muzzleFlashGroup.scale.setScalar(flashScale * (0.9 + Math.random() * 0.25));
-        muzzleFlashMat.opacity = prof.suppressed ? 0.42 : 0.96;
+        if (isScopedSniper) {
+          muzzleWorldPos.set(0.03, -0.075, -0.55).applyMatrix4(camera.matrixWorld);
+        } else {
+          muzzleAnchor.getWorldPosition(muzzleWorldPos);
+          muzzleFlashGroup.visible = true;
+          st.muzzleFlashTimer = prof.suppressed ? 0.032 : 0.052;
+          muzzleFlashGroup.rotation.z = Math.random() * Math.PI * 2;
+          const flashScale = prof.suppressed
+            ? 0.42
+            : prof.isSniper
+            ? 1.35
+            : prof.archetype === 'pistolet'
+            ? 0.78
+            : 1.0;
+          muzzleFlashGroup.scale.setScalar(flashScale * (0.9 + Math.random() * 0.25));
+          muzzleFlashMat.opacity = prof.suppressed ? 0.42 : 0.96;
+        }
 
         const hasImpact = zombieNotBlocked || envHits.length > 0;
         const hitPoint = zombieNotBlocked
@@ -1324,12 +1361,21 @@ export const ZombieGameView: React.FC<ZombieGameViewProps> = ({
         fireWeapon(now, false);
       }
 
-      // Smooth ADS sniper/rifle zoom FOV (never zoom on knives or mid-reload/inspect)
+      // Smooth ADS sniper/rifle zoom FOV + full AWP optical scope mode
       const activeFirearmAnim = firearmAnimatorRef.current;
       const firearmBusy = Boolean(activeFirearmAnim && activeFirearmAnim.isBusy());
-      const targetFov = st.adsZoom && !prof.isMelee && !st.reloading && !firearmBusy ? (prof.isSniper ? 26 : 44) : 62;
+      const isAimActive = st.adsZoom && !prof.isMelee && !st.reloading && !firearmBusy && !st.gameOver;
+      const isScopedNow = isAimActive && prof.isSniper;
+      if (isScopedNow !== lastScopedUi) {
+        lastScopedUi = isScopedNow;
+        setSniperScoped(isScopedNow);
+      }
+      viewModelRig.visible = !isScopedNow;
+
+      const targetFov = isAimActive ? (prof.isSniper ? 22 : 44) : 62;
       if (Math.abs(camera.fov - targetFov) > 0.1) {
-        camera.fov = THREE.MathUtils.lerp(camera.fov, targetFov, Math.min(1, dt * 14));
+        const zoomSpeed = isScopedNow ? 22 : 14;
+        camera.fov = THREE.MathUtils.lerp(camera.fov, targetFov, Math.min(1, dt * zoomSpeed));
         camera.updateProjectionMatrix();
       }
 
@@ -1343,6 +1389,7 @@ export const ZombieGameView: React.FC<ZombieGameViewProps> = ({
 
       const sprint = keysDown.has('ShiftLeft') || keysDown.has('ShiftRight') ? 1.45 : 1.0;
       const moveLen = Math.hypot(moveForward, moveRight);
+      st.isMoving = !st.gameOver && moveLen > 0;
       if (!st.gameOver && moveLen > 0) {
         moveForward /= moveLen;
         moveRight /= moveLen;
@@ -1537,8 +1584,12 @@ export const ZombieGameView: React.FC<ZombieGameViewProps> = ({
             const lost = st.sessionEarned;
             st.gameOver = true;
             st.sessionEarned = 0;
+            st.adsZoom = false;
+            lastScopedUi = false;
+            viewModelRig.visible = true;
             setLostCredits(lost);
             setSessionEarned(0);
+            setSniperScoped(false);
             setGameOver(true);
             suppressPointerExitRef.current = true;
             if (document.pointerLockElement) {
@@ -1694,19 +1745,46 @@ export const ZombieGameView: React.FC<ZombieGameViewProps> = ({
           </div>
         )}
 
+        {/* AWP Optical Sniper Scope Overlay when aiming (clic droit) */}
+        {!gameOver && sniperScoped && (
+          <div
+            data-testid="awp-scope-overlay"
+            className="pointer-events-none absolute inset-0 z-20 overflow-hidden"
+          >
+            {/* Full-diameter horizontal & vertical black reticle crosshairs */}
+            <svg
+              aria-hidden="true"
+              className="absolute inset-0 h-full w-full"
+            >
+              <line x1="0%" y1="50%" x2="100%" y2="50%" stroke="#05070a" strokeWidth="2" />
+              <line x1="50%" y1="0%" x2="50%" y2="100%" stroke="#05070a" strokeWidth="2" />
+            </svg>
+            {/* Outer opaque black scope tube + soft optical edge vignette */}
+            <div
+              className="absolute inset-0"
+              style={{
+                background:
+                  'radial-gradient(circle closest-side at 50% 50%, rgba(0,0,0,0) 0%, rgba(0,0,0,0) 82%, rgba(0,0,0,0.32) 89%, rgba(0,0,0,0.92) 95.5%, #000000 97.5%)',
+              }}
+            />
+          </div>
+        )}
+
         {/* Center Crosshair + Hitmarker */}
         {!gameOver && (
           <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center">
             <div className="relative flex items-center justify-center">
-              <Crosshair
-                className={`h-6 w-6 transition-transform duration-75 ${
-                  hitmarker === 'crit'
-                    ? 'scale-125 text-amber-300 drop-shadow-[0_0_8px_#fbbf24]'
-                    : hitmarker === 'body'
-                    ? 'scale-110 text-rose-400'
-                    : 'text-white/75'
-                }`}
-              />
+              {!sniperScoped && (
+                <Crosshair
+                  className={`h-6 w-6 transition-transform duration-75 ${
+                    hitmarker === 'crit'
+                      ? 'scale-125 text-amber-300 drop-shadow-[0_0_8px_#fbbf24]'
+                      : hitmarker === 'body'
+                      ? 'scale-110 text-rose-400'
+                      : 'text-white/75'
+                  }`}
+                />
+              )}
               {floatingReward && (
                 <motion.div
                   key={floatingReward.id}

@@ -342,5 +342,65 @@ export function applyFpsMouseDelta(
     Math.min(FPS_PITCH_LIMIT, currentPitch - dy * step)
   );
 
-  return { yaw: nextYaw, pitch: nextPitch, ignoredSpike: false };
+  return {
+    yaw: nextYaw,
+    pitch: nextPitch,
+    ignoredSpike: false,
+  };
+}
+
+export interface ShotSpreadParams {
+  profile: WeaponCombatProfile;
+  isAiming: boolean;
+  isMoving: boolean;
+  isAirborne?: boolean;
+  aspect?: number;
+  rng?: () => number;
+}
+
+/**
+ * Computes normalized device coordinate shot offset (rx, ry) for raycasting.
+ * AWP shots hit dead center (0, 0) when scoped & stationary, and scatter randomly
+ * across the forward cone whenever the player is moving or airborne.
+ */
+export function computeShotSpreadNDC({
+  profile,
+  isAiming,
+  isMoving,
+  isAirborne = false,
+  aspect = 16 / 9,
+  rng = Math.random,
+}: ShotSpreadParams): { rx: number; ry: number } {
+  if (profile.isMelee) return { rx: 0, ry: 0 };
+
+  const safeAspect = Math.max(0.5, aspect || 16 / 9);
+  const moving = isMoving || isAirborne;
+
+  if (profile.isSniper) {
+    if (isAiming && !moving) {
+      return { rx: 0, ry: 0 };
+    }
+    const maxRadiusY = isAiming
+      ? isAirborne
+        ? 0.55
+        : 0.40
+      : moving
+      ? isAirborne
+        ? 0.50
+        : 0.36
+      : 0.14;
+    const angle = rng() * Math.PI * 2;
+    const radius = (0.22 + 0.78 * Math.sqrt(rng())) * maxRadiusY;
+    return {
+      rx: (Math.cos(angle) * radius) / safeAspect,
+      ry: Math.sin(angle) * radius,
+    };
+  }
+
+  const spreadScale = (isAiming ? 0.25 : 1.0) * (isMoving ? 1.85 : 1.0) * (isAirborne ? 2.4 : 1.0);
+  const maxSpread = profile.spreadRad * spreadScale;
+  return {
+    rx: ((rng() - 0.5) * maxSpread) / Math.min(safeAspect, 1.5),
+    ry: (rng() - 0.5) * maxSpread,
+  };
 }

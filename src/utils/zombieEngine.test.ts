@@ -3,6 +3,7 @@ import { CRATES } from '../data/catalog';
 import { createInventoryItem } from './rng';
 import {
   applyFpsMouseDelta,
+  computeShotSpreadNDC,
   computeZombieReward,
   FPS_PITCH_LIMIT,
   getWeaponCombatProfile,
@@ -100,5 +101,41 @@ describe('Logique du mode Zombie FPS', () => {
     const hipStep = Math.abs(applyFpsMouseDelta(0, 0, 100, 0, 62).yaw);
     const adsStep = Math.abs(applyFpsMouseDelta(0, 0, 100, 0, 26).yaw);
     expect(adsStep).toBeLessThan(hipStep);
+  });
+
+  it('tire exactement au centre (0, 0) en AWP immobile en visée et disperse devant en mouvement', () => {
+    const awp = getWeaponCombatProfile('sniper', 'AWP', 'legendaire');
+
+    // Immobile + visée => exactement au centre du réticule
+    for (let i = 0; i < 20; i++) {
+      const stillAim = computeShotSpreadNDC({
+        profile: awp,
+        isAiming: true,
+        isMoving: false,
+        isAirborne: false,
+        aspect: 16 / 9,
+      });
+      expect(stillAim.rx).toBe(0);
+      expect(stillAim.ry).toBe(0);
+    }
+
+    // En mouvement => dispersion aléatoire en face dans le cône de visée
+    const offsets = Array.from({ length: 40 }, () =>
+      computeShotSpreadNDC({
+        profile: awp,
+        isAiming: true,
+        isMoving: true,
+        isAirborne: false,
+        aspect: 16 / 9,
+      })
+    );
+    const nonZero = offsets.filter((o) => Math.hypot(o.rx, o.ry) > 0.02);
+    expect(nonZero.length).toBe(offsets.length);
+    for (const o of offsets) {
+      expect(Math.abs(o.rx)).toBeLessThanOrEqual(0.5);
+      expect(Math.abs(o.ry)).toBeLessThanOrEqual(0.5);
+    }
+    const distinctX = new Set(offsets.map((o) => o.rx.toFixed(4)));
+    expect(distinctX.size).toBeGreaterThan(25);
   });
 });
