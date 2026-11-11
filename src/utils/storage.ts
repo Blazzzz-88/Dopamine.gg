@@ -1,8 +1,4 @@
 import { DEFAULT_THEME, ThemeId, THEMES } from '../data/themes';
-import {
-  mergePersonalValoInventory,
-  PERSONAL_VALO_GRANT_KEY,
-} from '../data/personalValoPack';
 import { DropHistoryItem, InventoryItem, PlayerStats } from '../types/casino';
 
 const STORAGE_KEY = 'dopamine_gg_state_v3';
@@ -75,32 +71,6 @@ export function createInitialState(): PersistedState {
 }
 
 export const INITIAL_STATE: PersistedState = createInitialState();
-
-function grantPersonalValoPackOnce(state: PersistedState): PersistedState {
-  try {
-    if (localStorage.getItem(PERSONAL_VALO_GRANT_KEY)) {
-      return state;
-    }
-    const merged = mergePersonalValoInventory(
-      state.inventory,
-      state.inventoryCapacity,
-      STORAGE_UPGRADE_STEP
-    );
-    const nextState: PersistedState =
-      merged.addedCount > 0
-        ? {
-            ...state,
-            inventory: merged.inventory,
-            inventoryCapacity: merged.inventoryCapacity,
-          }
-        : state;
-    savePersistedState(nextState);
-    localStorage.setItem(PERSONAL_VALO_GRANT_KEY, '1');
-    return nextState;
-  } catch {
-    return state;
-  }
-}
 
 export function loadPersistedState(): PersistedState {
   let resolvedState: PersistedState;
@@ -187,9 +157,7 @@ export function loadPersistedState(): PersistedState {
     resolvedState = createInitialState();
   }
 
-  if (typeof __ENABLE_PERSONAL_VALO_PACK__ !== 'undefined' && __ENABLE_PERSONAL_VALO_PACK__) {
-    return grantPersonalValoPackOnce(resolvedState);
-  }
+  // Pack personnel désactivé pour que l'inventaire commence vide pour tout le monde
   return resolvedState;
 }
 

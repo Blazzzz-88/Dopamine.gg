@@ -65,7 +65,20 @@ function clearRemovedEquips(prev: PersistedState, removedIds: Set<string>) {
 }
 
 export function App() {
-  const [persisted, setPersisted] = useState<PersistedState>(() => loadPersistedState());
+  const [persisted, setPersisted] = useState<PersistedState>(() => {
+    // Si l'utilisateur avait l'ancien pack valorant pré-chargé, vider pour démarrer propre
+    const state = loadPersistedState();
+    if (localStorage.getItem('personal_valo_pack_granted_v1') && state.inventory.length > 0) {
+      localStorage.removeItem('personal_valo_pack_granted_v1');
+      return {
+        ...state,
+        inventory: [],
+        equippedWeaponId: null,
+        equippedKnifeId: null,
+      };
+    }
+    return state;
+  });
   const [pageMode, setPageMode] = useState<'casino' | 'zombie'>('casino');
   const [activeTab, setActiveTab] = useState<NavTab>('boutique');
   const [activeCrate, setActiveCrate] = useState<CrateDefinition | null>(null);
