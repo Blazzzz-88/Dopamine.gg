@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   Palette,
   User,
+  Trophy,
 } from 'lucide-react';
 import { ThemeId, THEMES } from '../data/themes';
 import { NavTab } from '../types/casino';
@@ -29,6 +30,8 @@ interface NavbarProps {
   soundEnabled: boolean;
   onToggleSound: () => void;
   onOpenZombie: () => void;
+  onOpenChallenges: () => void;
+  challengesCompletedCount?: number;
   themeId: ThemeId;
   onSelectTheme: (themeId: ThemeId, themeName: string) => void;
   onOpenAuth: () => void;
@@ -53,6 +56,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   soundEnabled,
   onToggleSound,
   onOpenZombie,
+  onOpenChallenges,
+  challengesCompletedCount = 0,
   themeId,
   onSelectTheme,
   onOpenAuth,
@@ -263,7 +268,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {creditMenuOpen && (
               <div
                 role="menu"
-                className="absolute right-0 top-[calc(100%+8px)] z-50 w-56 overflow-hidden rounded-2xl border border-accent-500/30 bg-surface-card/95 p-1.5 shadow-[0_18px_45px_rgba(0,0,0,0.75)] backdrop-blur-xl"
+                className="absolute right-0 top-[calc(100%+8px)] z-50 w-64 overflow-hidden rounded-2xl border border-accent-500/30 bg-surface-card/95 p-1.5 shadow-[0_18px_45px_rgba(0,0,0,0.75)] backdrop-blur-xl"
               >
                 <button
                   type="button"
@@ -288,6 +293,40 @@ export const Navbar: React.FC<NavbarProps> = ({
                       </div>
                     </div>
                   </div>
+                </button>
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    soundEngine.playClick();
+                    setCreditMenuOpen(false);
+                    onOpenChallenges();
+                  }}
+                  className="mt-1 flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-left transition hover:bg-amber-500/15"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-amber-400/35 bg-amber-500/15 text-amber-300">
+                      <Trophy className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <div className="font-display text-xs font-bold uppercase tracking-wider text-accent-50">
+                        Défis
+                      </div>
+                      <div className="text-[10px] text-accent-200/65">
+                        +500 CR / défi • Bonus +3 000 CR
+                      </div>
+                    </div>
+                  </div>
+                  <span
+                    className={`rounded-full px-2 py-0.5 font-mono-num text-[10px] font-bold ${
+                      challengesCompletedCount >= 3
+                        ? 'bg-emerald-500/20 text-emerald-300'
+                        : 'bg-amber-500/20 text-amber-300'
+                    }`}
+                  >
+                    {challengesCompletedCount}/3
+                  </span>
                 </button>
               </div>
             )}

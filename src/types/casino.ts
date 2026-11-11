@@ -115,3 +115,44 @@ export interface PlayerStats {
   bestDropName: string | null;
   rarityCounts: Record<RarityId, number>;
 }
+
+export type ZombieChallengeKind =
+  | 'kills'
+  | 'headshots'
+  | 'rodeur_kills'
+  | 'colosse_kills'
+  | 'survive_time'
+  | 'wave_reach'
+  | 'run_kills'
+  | 'full_hp_time'
+  | 'full_hp_kills'
+  | 'extract_credits';
+
+export type ZombieChallengeCategory = 'combat' | 'survie' | 'maitrise';
+
+export interface ZombieChallengeDefinition {
+  id: string;
+  category: ZombieChallengeCategory;
+  title: string;
+  description: string;
+  kind: ZombieChallengeKind;
+  target: number;
+  unitLabel: string;
+  scopeLabel: string;
+  reward: number;
+}
+
+export interface DailyChallengeItem {
+  id: string;
+  progress: number;
+  completed: boolean;
+  completedAt: number | null;
+  rewardClaimed: boolean;
+}
+
+export interface DailyChallengesState {
+  date: string;
+  challenges: DailyChallengeItem[];
+  bonusClaimed: boolean;
+  bonusClaimedAt: number | null;
+}

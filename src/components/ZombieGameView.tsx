@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft,
+  CheckCircle2,
   Coins,
   Crosshair,
   Flame,
@@ -9,11 +10,12 @@ import {
   RotateCw,
   Shield,
   Skull,
+  Trophy,
 } from 'lucide-react';
 import * as THREE from 'three';
 import { CRATES } from '../data/catalog';
 import { RARITIES } from '../data/rarities';
-import { InventoryItem } from '../types/casino';
+import { DailyChallengesState, InventoryItem } from '../types/casino';
 import { createFPSHands, FPSHandsRig, getFPSWeaponViewConfig } from '../utils/fpsHandsBuilder';
 import {
   applyFirearmAnimPose,
@@ -68,12 +70,25 @@ import {
   resolveArenaCircleCollision,
   stepZombieTowardPlayer,
 } from '../utils/zombieArenaBuilder';
+import {
+  createDailyChallengesState,
+  DAILY_BONUS_CREDITS,
+  DAILY_CHALLENGES_LIMIT,
+  ensureTodayChallenges,
+  formatChallengeProgressValue,
+  formatMinutesSeconds,
+  getChallengeDefinition,
+  hasIncompleteTimeChallenge,
+  ZombieChallengeEvent,
+} from '../utils/zombieChallenges';
 
 interface ZombieGameViewProps {
   inventory: InventoryItem[];
   equippedWeaponId?: string | null;
   equippedKnifeId?: string | null;
   balance: number;
+  dailyChallenges?: DailyChallengesState;
+  onChallengeProgress?: (event: ZombieChallengeEvent) => void;
   onExit: (bankedCredits: number) => void;
   onGoToShop: (bankedCredits: number) => void;
 }
@@ -203,6 +218,8 @@ export const ZombieGameView: React.FC<ZombieGameViewProps> = ({
   equippedWeaponId,
   equippedKnifeId,
   balance,
+  dailyChallenges,
+  onChallengeProgress,
   onExit,
   onGoToShop,
 }) => {
@@ -280,6 +297,92 @@ export const ZombieGameView: React.FC<ZombieGameViewProps> = ({
   const [killFeed, setKillFeed] = useState<KillFeedEntry[]>([]);
   const [floatingReward, setFloatingReward] = useState<{ id: number; amount: number; headshot: boolean } | null>(null);
   const [webglError, setWebglError] = useState<string | null>(null);
+  const [runElapsedUi, setRunElapsedUi] = useState(0);
+  const [fullHpStreakUi, setFullHpStreakUi] = useState(0);
+  const [fullHpKillsUi, setFullHpKillsUi] = useState(0);
+  const [runEarnedChallengeBonus, setRunEarnedChallengeBonus] = useState(0);
+  const [challengeBanner, setChallengeBanner] = useState<{
+    id: string;
+    title: string;
+    subtitle: string;
+    reward: number;
+    isBonusAll: boolean;
+  } | null>(null);
+
+  const resolvedChallenges = useMemo(
+    () => (dailyChallenges ? ensureTodayChallenges(dailyChallenges) : createDailyChallengesState()),
+    [dailyChallenges]
+  );
+
+  const resolvedChallengesRef = useRef(resolvedChallenges);
+  resolvedChallengesRef.current = resolvedChallenges;
+
+  const onChallengeProgressRef = useRef(onChallengeProgress);
+  onChallengeProgressRef.current = onChallengeProgress;
+
+  const notifiedChallengesRef = useRef<Set<string> | null>(null);
+  if (notifiedChallengesRef.current === null) {
+    const initSet = new Set<string>();
+    for (const c of resolvedChallenges.challenges) {
+      if (c.completed) initSet.add(`${resolvedChallenges.date}::${c.id}`);
+    }
+    if (resolvedChallenges.bonusClaimed) {
+      initSet.add(`${resolvedChallenges.date}::bonus`);
+    }
+    notifiedChallengesRef.current = initSet;
+  }
+
+  useEffect(() => {
+    const notified = notifiedChallengesRef.current!;
+    const newlyCompletedTitles: string[] = [];
+    let rewardSum = 0;
+    let bonusNow = false;
+
+    for (const c of resolvedChallenges.challenges) {
+      const key = `${resolvedChallenges.date}::${c.id}`;
+      if (c.completed && !notified.has(key)) {
+        notified.add(key);
+        const def = getChallengeDefinition(c.id);
+        if (def) {
+          newlyCompletedTitles.push(def.title);
+          rewardSum += def.reward;
+        }
+      }
+    }
+
+    const bonusKey = `${resolvedChallenges.date}::bonus`;
+    if (resolvedChallenges.bonusClaimed && !notified.has(bonusKey)) {
+      notified.add(bonusKey);
+      bonusNow = true;
+      rewardSum += DAILY_BONUS_CREDITS;
+    }
+
+    if (rewardSum > 0) {
+      setRunEarnedChallengeBonus((prev) => prev + rewardSum);
+      if (bonusNow) {
+        soundEngine.playReveal('legendaire');
+      } else {
+        soundEngine.playCash();
+      }
+      setChallengeBanner({
+        id: `${Date.now()}_${Math.random()}`,
+        title: bonusNow
+          ? `${DAILY_CHALLENGES_LIMIT}/${DAILY_CHALLENGES_LIMIT} Défis complétés !`
+          : `Défi réussi : ${newlyCompletedTitles[0] ?? 'Objectif Zombie'}`,
+        subtitle: bonusNow
+          ? 'Bonus quotidien maximal débloqué !'
+          : newlyCompletedTitles.join(' • '),
+        reward: rewardSum,
+        isBonusAll: bonusNow,
+      });
+    }
+  }, [resolvedChallenges]);
+
+  useEffect(() => {
+    if (!challengeBanner) return;
+    const t = window.setTimeout(() => setChallengeBanner(null), 4000);
+    return () => window.clearTimeout(t);
+  }, [challengeBanner]);
 
   const onExitRef = useRef(onExit);
   onExitRef.current = onExit;
@@ -323,6 +426,11 @@ export const ZombieGameView: React.FC<ZombieGameViewProps> = ({
     isMoving: false,
     nextId: 1,
     gameOver: false,
+    runElapsedSec: 0,
+    fullHpStreakSec: 0,
+    fullHpKillsStreak: 0,
+    lastUiSec: 0,
+    lastUiHpStreakSec: 0,
   });
 
   const swapWeaponFnRef = useRef<((item: InventoryItem) => void) | null>(null);
@@ -938,6 +1046,11 @@ export const ZombieGameView: React.FC<ZombieGameViewProps> = ({
       st.sessionEarned = 0;
       st.gameOver = false;
       st.isMoving = false;
+      st.runElapsedSec = 0;
+      st.fullHpStreakSec = 0;
+      st.fullHpKillsStreak = 0;
+      st.lastUiSec = 0;
+      st.lastUiHpStreakSec = 0;
       st.posX = 0;
       st.posZ = 4;
       st.posY = 1.65;
@@ -960,6 +1073,10 @@ export const ZombieGameView: React.FC<ZombieGameViewProps> = ({
       setHp(100);
       setKills(0);
       setWave(1);
+      setRunElapsedUi(0);
+      setFullHpStreakUi(0);
+      setFullHpKillsUi(0);
+      setRunEarnedChallengeBonus(0);
       setSessionEarned(0);
       setLostCredits(0);
       setKillFeed([]);
@@ -1195,10 +1312,28 @@ export const ZombieGameView: React.FC<ZombieGameViewProps> = ({
             st.kills += 1;
             st.sessionEarned += reward;
             st.wave = Math.floor(st.kills / 8) + 1;
+            if (st.hp >= 100) {
+              st.fullHpKillsStreak += 1;
+            } else {
+              st.fullHpKillsStreak = 0;
+            }
             setKills(st.kills);
             setSessionEarned(st.sessionEarned);
             setWave(st.wave);
+            setFullHpKillsUi(st.fullHpKillsStreak);
             soundEngine.playZombieKill();
+
+            onChallengeProgressRef.current?.({
+              killsDelta: 1,
+              headshotsDelta: isHead ? 1 : 0,
+              rodeurDelta: hitZombie.tier === 'rapide' ? 1 : 0,
+              colosseDelta: hitZombie.tier === 'colosse' ? 1 : 0,
+              runKills: st.kills,
+              wave: st.wave,
+              runElapsedSec: Math.floor(st.runElapsedSec),
+              fullHpStreakSec: Math.floor(st.fullHpStreakSec),
+              fullHpKillsStreak: st.fullHpKillsStreak,
+            });
 
             const fid = Date.now() + Math.random();
             setFloatingReward({ id: fid, amount: reward, headshot: isHead });
@@ -1578,7 +1713,11 @@ export const ZombieGameView: React.FC<ZombieGameViewProps> = ({
         } else {
           // Damage player gently at close range
           st.hp = Math.max(0, st.hp - 22 * dt);
-          setHp(Math.ceil(st.hp));
+          st.fullHpStreakSec = 0;
+          st.fullHpKillsStreak = 0;
+          const displayHp =
+            st.hp >= 100 ? 100 : st.hp <= 0 ? 0 : Math.min(99, Math.ceil(st.hp));
+          setHp(displayHp);
           if (st.hp <= 0 && !st.gameOver) {
             // Death wipes ALL unbanked session credits from this run
             const lost = st.sessionEarned;
@@ -1603,6 +1742,33 @@ export const ZombieGameView: React.FC<ZombieGameViewProps> = ({
         z.model.setHitFlash(flinch);
         if (z.hitFlash > 0) {
           z.hitFlash = Math.max(0, z.hitFlash - dt);
+        }
+      }
+
+      if (!st.gameOver) {
+        st.runElapsedSec += dt;
+        if (st.hp >= 100) {
+          st.fullHpStreakSec += dt;
+        } else {
+          st.fullHpStreakSec = 0;
+          st.fullHpKillsStreak = 0;
+        }
+
+        const curRunSec = Math.floor(st.runElapsedSec);
+        const curStreakSec = Math.floor(st.fullHpStreakSec);
+        if (curRunSec !== st.lastUiSec || curStreakSec !== st.lastUiHpStreakSec) {
+          st.lastUiSec = curRunSec;
+          st.lastUiHpStreakSec = curStreakSec;
+          setRunElapsedUi(curRunSec);
+          setFullHpStreakUi(curStreakSec);
+          setFullHpKillsUi(st.fullHpKillsStreak);
+          if (hasIncompleteTimeChallenge(resolvedChallengesRef.current)) {
+            onChallengeProgressRef.current?.({
+              runElapsedSec: curRunSec,
+              fullHpStreakSec: curStreakSec,
+              wave: st.wave,
+            });
+          }
         }
       }
 
@@ -1800,6 +1966,150 @@ export const ZombieGameView: React.FC<ZombieGameViewProps> = ({
           </div>
         )}
 
+        {/* Top-Left Compact Daily Challenges HUD */}
+        {!gameOver && !sniperScoped && (
+          <div
+            data-testid="zombie-challenges-hud"
+            className={`pointer-events-none absolute left-4 z-20 hidden w-64 rounded-2xl border border-white/12 bg-black/65 p-3 backdrop-blur-md sm:block ${
+              !pointerLocked ? 'top-16 lg:top-4' : 'top-4'
+            }`}
+          >
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5">
+                <Trophy className="h-3.5 w-3.5 text-amber-300" />
+                <span className="font-display text-[11px] font-bold uppercase tracking-wider text-accent-50">
+                  Défis du jour
+                </span>
+              </div>
+              <span
+                className={`rounded-full px-1.5 py-0.5 font-mono-num text-[10px] font-bold ${
+                  resolvedChallenges.bonusClaimed
+                    ? 'bg-emerald-500/20 text-emerald-300'
+                    : 'bg-amber-500/20 text-amber-300'
+                }`}
+              >
+                {resolvedChallenges.challenges.filter((c) => c.completed).length}/
+                {DAILY_CHALLENGES_LIMIT}
+              </span>
+            </div>
+
+            <div className="space-y-2">
+              {resolvedChallenges.challenges.map((item) => {
+                const def = getChallengeDefinition(item.id);
+                if (!def) return null;
+
+                let displayValue = item.progress;
+                if (!item.completed) {
+                  if (def.kind === 'survive_time') displayValue = runElapsedUi;
+                  else if (def.kind === 'full_hp_time') displayValue = hp >= 100 ? fullHpStreakUi : 0;
+                  else if (def.kind === 'full_hp_kills') displayValue = hp >= 100 ? fullHpKillsUi : 0;
+                  else if (def.kind === 'run_kills') displayValue = kills;
+                  else if (def.kind === 'wave_reach') displayValue = wave;
+                }
+
+                const pct = Math.min(100, Math.round((displayValue / def.target) * 100));
+                const brokenHpStreak =
+                  !item.completed &&
+                  (def.kind === 'full_hp_time' || def.kind === 'full_hp_kills') &&
+                  hp < 100;
+
+                return (
+                  <div key={def.id} className="space-y-1">
+                    <div className="flex items-center justify-between gap-1.5 text-[10px]">
+                      <span
+                        className={`truncate font-semibold ${
+                          item.completed ? 'text-emerald-300' : 'text-accent-100/90'
+                        }`}
+                      >
+                        {item.completed ? '✓ ' : ''}
+                        {def.title}
+                      </span>
+                      <span
+                        className={`shrink-0 font-mono-num font-bold ${
+                          item.completed
+                            ? 'text-emerald-300'
+                            : brokenHpStreak
+                            ? 'text-rose-300'
+                            : 'text-amber-300'
+                        }`}
+                      >
+                        {item.completed
+                          ? '+500 CR'
+                          : brokenHpStreak
+                          ? 'PV < 100%'
+                          : formatChallengeProgressValue(def, displayValue)}
+                      </span>
+                    </div>
+                    <div className="h-1 w-full overflow-hidden rounded-full bg-white/10">
+                      <div
+                        className={`h-full rounded-full transition-all duration-200 ${
+                          item.completed
+                            ? 'bg-emerald-400'
+                            : brokenHpStreak
+                            ? 'bg-rose-500/60'
+                            : 'bg-amber-400'
+                        }`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mt-2 flex items-center justify-between border-t border-white/10 pt-1.5 text-[10px]">
+              <span className="text-accent-200/65">
+                {resolvedChallenges.bonusClaimed ? 'Bonus 3/3 validé' : 'Bonus 3/3 défis'}
+              </span>
+              <span
+                className={`font-mono-num font-bold ${
+                  resolvedChallenges.bonusClaimed ? 'text-emerald-300' : 'text-amber-300'
+                }`}
+              >
+                {resolvedChallenges.bonusClaimed
+                  ? `+${formatCredits(DAILY_BONUS_CREDITS)} ✓`
+                  : `+${formatCredits(DAILY_BONUS_CREDITS)}`}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Challenge Completion Celebration Banner */}
+        <AnimatePresence>
+          {challengeBanner && !gameOver && (
+            <motion.div
+              key={challengeBanner.id}
+              initial={{ opacity: 0, y: -16, scale: 0.94 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -12, scale: 0.95 }}
+              className={`pointer-events-none absolute inset-x-0 z-30 flex justify-center px-4 ${
+                !pointerLocked ? 'top-20' : 'top-5'
+              }`}
+            >
+              <div
+                className={`flex items-center gap-3 rounded-2xl border px-4 py-2.5 shadow-[0_14px_38px_rgba(0,0,0,0.85)] backdrop-blur-xl ${
+                  challengeBanner.isBonusAll
+                    ? 'border-amber-300/60 bg-gradient-to-r from-amber-500/25 via-emerald-500/20 to-surface-card/95'
+                    : 'border-emerald-400/50 bg-surface-card/95'
+                }`}
+              >
+                <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-300" />
+                <div>
+                  <div className="font-display text-xs font-extrabold uppercase tracking-wider text-white">
+                    {challengeBanner.title}
+                  </div>
+                  <div className="text-[11px] text-accent-100/80">
+                    {challengeBanner.subtitle} •{' '}
+                    <span className="font-mono-num font-extrabold text-emerald-300">
+                      +{formatCredits(challengeBanner.reward)} crédités
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Top-Right Kill Feed */}
         <div className="pointer-events-none absolute right-4 top-4 z-20 flex flex-col items-end gap-1.5">
           <AnimatePresence>
@@ -1948,10 +2258,20 @@ export const ZombieGameView: React.FC<ZombieGameViewProps> = ({
                 Vous êtes mort !
               </h2>
               <p className="mt-2 text-xs text-accent-100/75">
-                Vous avez succombé après <strong>{kills}</strong> élimination(s). Tout le butin
+                Vous avez succombé après <strong>{kills}</strong> élimination(s) en{' '}
+                <strong>{formatMinutesSeconds(runElapsedUi)}</strong>. Tout le butin
                 récolté durant cette partie (<strong className="text-rose-300">{formatCredits(lostCredits)}</strong>)
                 est perdu — <strong>0 CR</strong> crédité sur votre solde.
               </p>
+              {runEarnedChallengeBonus > 0 && (
+                <p className="mt-2 rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-[11px] text-emerald-200">
+                  Vos récompenses de défis déjà validés (
+                  <strong className="font-mono-num">
+                    +{formatCredits(runEarnedChallengeBonus)}
+                  </strong>
+                  ) restent acquises sur votre solde casino.
+                </p>
+              )}
               <div className="mt-5 flex flex-wrap justify-center gap-3">
                 <button
                   type="button"

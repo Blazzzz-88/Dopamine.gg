@@ -1,5 +1,14 @@
 import { DEFAULT_THEME, ThemeId, THEMES } from '../data/themes';
-import { DropHistoryItem, InventoryItem, PlayerStats } from '../types/casino';
+import {
+  DailyChallengesState,
+  DropHistoryItem,
+  InventoryItem,
+  PlayerStats,
+} from '../types/casino';
+import {
+  createDailyChallengesState,
+  ensureTodayChallenges,
+} from './zombieChallenges';
 
 const STORAGE_KEY = 'dopamine_gg_state_v3';
 const LEGACY_KEYS = [
@@ -31,6 +40,7 @@ export interface PersistedState {
   equippedKnifeId: string | null;
   history: DropHistoryItem[];
   stats: PlayerStats;
+  dailyChallenges: DailyChallengesState;
   soundEnabled: boolean;
   themeId: ThemeId;
 }
@@ -66,6 +76,7 @@ export function createInitialState(): PersistedState {
     equippedKnifeId: null,
     history: [],
     stats: createDefaultStats(),
+    dailyChallenges: createDailyChallengesState(),
     soundEnabled: true,
     themeId: DEFAULT_THEME,
   };
@@ -150,6 +161,7 @@ export function loadPersistedState(): PersistedState {
               },
             }
           : createDefaultStats(),
+        dailyChallenges: ensureTodayChallenges(parsed.dailyChallenges),
         soundEnabled: typeof parsed.soundEnabled === 'boolean' ? parsed.soundEnabled : true,
         themeId: validTheme,
       };

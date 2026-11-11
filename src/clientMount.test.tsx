@@ -512,4 +512,76 @@ describe('Client mount smoke test (jsdom + StrictMode)', () => {
     });
     container.remove();
   });
+
+  it('affiche le menu Défis dans le + des crédits avec 3 défis quotidiens (+500 CR et bonus +3 000 CR) et lance le mode Zombie', async () => {
+    localStorage.clear();
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <StrictMode>
+          <App />
+        </StrictMode>
+      );
+    });
+    await new Promise((r) => setTimeout(r, 80));
+
+    const plusBtn = container.querySelector(
+      'button[aria-label="Gagner des crédits"]'
+    ) as HTMLButtonElement | null;
+    expect(plusBtn).not.toBeNull();
+    await act(async () => {
+      plusBtn?.click();
+    });
+
+    const menuItems = Array.from(container.querySelectorAll('button[role="menuitem"]'));
+    expect(menuItems.length).toBe(2);
+    expect(menuItems[0].textContent).toContain('Zombie');
+    expect(menuItems[1].textContent).toContain('Défis');
+    expect(menuItems[1].textContent).toContain('0/3');
+
+    await act(async () => {
+      (menuItems[1] as HTMLButtonElement).click();
+    });
+    await new Promise((r) => setTimeout(r, 80));
+
+    const dialog = container.querySelector(
+      '[role="dialog"][aria-label="Défis quotidiens du Mode Zombie"]'
+    );
+    expect(dialog).not.toBeNull();
+    const text = (dialog?.textContent ?? '').replace(/\s+/g, ' ');
+    expect(text).toContain('Défis du jour');
+    expect(text).toContain('Max 3 / jour');
+    expect(text).toContain('0 / 3 complétés');
+    expect(text).toContain('+500 CR');
+    expect(text).toContain('+3 000 CR');
+
+    const challengeCards = dialog?.querySelectorAll('[data-testid^="challenge-card-"]') ?? [];
+    expect(challengeCards).toHaveLength(3);
+
+    const playZombieBtn = Array.from(dialog?.querySelectorAll('button') ?? []).find((b) =>
+      b.textContent?.includes('Lancer le Mode Zombie')
+    ) as HTMLButtonElement | undefined;
+    expect(playZombieBtn).toBeDefined();
+
+    await act(async () => {
+      playZombieBtn?.click();
+    });
+    await new Promise((r) => setTimeout(r, 80));
+
+    expect(container.innerHTML).toContain('Mode Zombie FPS');
+    expect(container.querySelector('[data-testid="zombie-challenges-hud"]')).not.toBeNull();
+
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));
+    });
+    await new Promise((r) => setTimeout(r, 60));
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+  });
 });

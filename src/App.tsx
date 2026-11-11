@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { CRATES } from './data/catalog';
 import { RARITIES } from './data/rarities';
@@ -36,9 +36,18 @@ import { UpgraderView } from './components/UpgraderView';
 import { ContractView } from './components/ContractView';
 import { StatsAndGuideView } from './components/StatsAndGuideView';
 import { ZombieGameView } from './components/ZombieGameView';
+import { ChallengesModal } from './components/ChallengesModal';
 import { WeaponInspectModal } from './components/WeaponInspectModal';
 import { TypewriterText } from './components/TypewriterText';
 import { AuthModal } from './components/AuthModal';
+import {
+  applyZombieChallengeProgress,
+  DAILY_BONUS_CREDITS,
+  DAILY_CHALLENGES_LIMIT,
+  ensureTodayChallenges,
+  getChallengeDefinition,
+  ZombieChallengeEvent,
+} from './utils/zombieChallenges';
 import { supabase } from './utils/supabaseClient';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 import {
@@ -93,6 +102,9 @@ export function App() {
   const [currentUser, setCurrentUser] = useState<SupabaseUser | null>(null);
   const [currentUsername, setCurrentUsername] = useState<string | null>(null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [challengesModalOpen, setChallengesModalOpen] = useState(false);
+  const pageModeRef = useRef(pageMode);
+  pageModeRef.current = pageMode;
 
   // Charger la session Supabase et écouter les changements
   const loadCloudProfile = useCallback(async (user: SupabaseUser) => {
@@ -534,14 +546,94 @@ export function App() {
     pushToast(`Stockage augmenté à ${nextCap} places (-${formatCredits(cost)})`);
   }, [persisted.balance, persisted.inventoryCapacity, pushToast]);
 
+  const syncDailyDateRollover = useCallback(() => {
+    setPersisted((prev) => {
+      const rolled = ensureTodayChallenges(prev.dailyChallenges);
+      if (rolled.date === prev.dailyChallenges.date) return prev;
+      return {
+        ...prev,
+        dailyChallenges: rolled,
+      };
+    });
+  }, []);
+
+  const notifiedChallengeKeysRef = useRef<Set<string> | null>(null);
+  if (notifiedChallengeKeysRef.current === null) {
+    const initialSet = new Set<string>();
+    const dc = ensureTodayChallenges(persisted.dailyChallenges);
+    for (const c of dc.challenges) {
+      if (c.completed) initialSet.add(`${dc.date}::${c.id}`);
+    }
+    if (dc.bonusClaimed) initialSet.add(`${dc.date}::bonus`);
+    notifiedChallengeKeysRef.current = initialSet;
+  }
+
+  useEffect(() => {
+    const notified = notifiedChallengeKeysRef.current!;
+    const dc = persisted.dailyChallenges;
+    let toastPlayed = false;
+
+    for (const c of dc.challenges) {
+      const key = `${dc.date}::${c.id}`;
+      if (c.completed && !notified.has(key)) {
+        notified.add(key);
+        if (pageModeRef.current === 'casino') {
+          const def = getChallengeDefinition(c.id);
+          if (def) {
+            pushToast(`Défi réussi : ${def.title} (+${formatCredits(def.reward)})`);
+            toastPlayed = true;
+          }
+        }
+      }
+    }
+
+    const bonusKey = `${dc.date}::bonus`;
+    if (dc.bonusClaimed && !notified.has(bonusKey)) {
+      notified.add(bonusKey);
+      if (pageModeRef.current === 'casino') {
+        pushToast(
+          `${DAILY_CHALLENGES_LIMIT}/${DAILY_CHALLENGES_LIMIT} Défis complétés ! Bonus +${formatCredits(DAILY_BONUS_CREDITS)}`
+        );
+        soundEngine.playReveal('legendaire');
+        toastPlayed = false;
+      }
+    }
+
+    if (toastPlayed) {
+      soundEngine.playCash();
+    }
+  }, [persisted.dailyChallenges, pushToast]);
+
+  const handleZombieChallengeProgress = useCallback((event: ZombieChallengeEvent) => {
+    const now = Date.now();
+    setPersisted((prev) => {
+      const result = applyZombieChallengeProgress(prev.dailyChallenges, event, now);
+      if (!result.changed && result.creditsEarned === 0) return prev;
+      return {
+        ...prev,
+        balance: prev.balance + result.creditsEarned,
+        dailyChallenges: result.nextState,
+      };
+    });
+  }, []);
+
   const handleExitZombieMode = useCallback(
     (bankedCredits: number, goToShop = false) => {
       if (bankedCredits > 0) {
         soundEngine.playCash();
-        setPersisted((prev) => ({
-          ...prev,
-          balance: prev.balance + bankedCredits,
-        }));
+        const now = Date.now();
+        setPersisted((prev) => {
+          const res = applyZombieChallengeProgress(
+            prev.dailyChallenges,
+            { extractedCreditsDelta: bankedCredits },
+            now
+          );
+          return {
+            ...prev,
+            balance: prev.balance + bankedCredits + res.creditsEarned,
+            dailyChallenges: res.nextState,
+          };
+        });
         pushToast(`Extraction Zombie réussie : +${formatCredits(bankedCredits)}`);
       }
       setPageMode('casino');
@@ -558,14 +650,18 @@ export function App() {
     setUpgraderSeedId(null);
     setContractSeedId(null);
     setTickerDrops(Array.from({ length: 10 }, () => generateSimulatedDrop()));
-    setPersisted({
+    setPersisted((prev) => ({
       ...createInitialState(),
       stats: createDefaultStats(),
-      soundEnabled: persisted.soundEnabled,
-      themeId: persisted.themeId,
-    });
+      dailyChallenges: ensureTodayChallenges(prev.dailyChallenges),
+      soundEnabled: prev.soundEnabled,
+      themeId: prev.themeId,
+    }));
     pushToast('Session réinitialisée à 3 000 CR');
-  }, [persisted.soundEnabled, persisted.themeId, pushToast]);
+  }, [pushToast]);
+
+  const todayChallenges = ensureTodayChallenges(persisted.dailyChallenges);
+  const completedChallengesCount = todayChallenges.challenges.filter((c) => c.completed).length;
 
   return (
     <WeaponInspectorProvider>
@@ -575,6 +671,8 @@ export function App() {
           equippedWeaponId={persisted.equippedWeaponId}
           equippedKnifeId={persisted.equippedKnifeId}
           balance={persisted.balance}
+          dailyChallenges={todayChallenges}
+          onChallengeProgress={handleZombieChallengeProgress}
           onExit={(bankedCredits) => handleExitZombieMode(bankedCredits, false)}
           onGoToShop={(bankedCredits) => handleExitZombieMode(bankedCredits, true)}
         />
@@ -605,7 +703,15 @@ export function App() {
           onToggleSound={() =>
             setPersisted((prev) => ({ ...prev, soundEnabled: !prev.soundEnabled }))
           }
-          onOpenZombie={() => setPageMode('zombie')}
+          onOpenZombie={() => {
+            syncDailyDateRollover();
+            setPageMode('zombie');
+          }}
+          onOpenChallenges={() => {
+            syncDailyDateRollover();
+            setChallengesModalOpen(true);
+          }}
+          challengesCompletedCount={completedChallengesCount}
           themeId={persisted.themeId}
           onSelectTheme={handleSelectTheme}
           onOpenAuth={() => setAuthModalOpen(true)}
@@ -799,6 +905,20 @@ export function App() {
         onAuthSuccess={() => {
           if (currentUser) loadCloudProfile(currentUser);
         }}
+      />
+
+      {/* Zombie Daily Challenges Modal */}
+      <ChallengesModal
+        isOpen={challengesModalOpen}
+        dailyChallenges={todayChallenges}
+        balance={persisted.balance}
+        onClose={() => setChallengesModalOpen(false)}
+        onPlayZombie={() => {
+          setChallengesModalOpen(false);
+          syncDailyDateRollover();
+          setPageMode('zombie');
+        }}
+        onSyncDateRollover={syncDailyDateRollover}
       />
       </div>
       )}
