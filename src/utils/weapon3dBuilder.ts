@@ -158,6 +158,7 @@ function computeEuclideanDistance(bin: Uint8Array, w: number, h: number): Float3
 
 interface ComponentMeta {
   id: number;
+  pixelCount: number;
   minX: number;
   maxX: number;
   minY: number;
@@ -319,6 +320,7 @@ function analyzeComponents(
 
     kept.push({
       id: newIdx,
+      pixelCount: pixels.length,
       minX,
       maxX,
       minY,
@@ -1454,18 +1456,50 @@ export function buildSculptedMeshData(
       : rawAlpha;
 
   if (options?.singleHeroComponent && components.length > 1) {
-    const hero = components.reduce((best, c) => (c.cy > best.cy ? c : best), components[0]);
+    const maxArea = Math.max(...components.map((c) => c.pixelCount));
+    // Only treat components >= 25% of the largest piece as separate weapon candidates (e.g. twin bayonets),
+    // never a tiny floating trigger / sight / barrel fragment sitting below the weapon center of mass.
+    const majorComps = components.filter((c) => c.pixelCount >= maxArea * 0.25);
+    const hero = majorComps.reduce((best, c) => (c.cy > best.cy ? c : best), majorComps[0]);
+    const discardedMajors = majorComps.filter((c) => c.id !== hero.id);
+    const padX = Math.max(8, Math.round(w * 0.04));
+    const padY = 8;
+
+    const keptIds = new Set<number>([hero.id]);
+    for (const c of components) {
+      if (c.id === hero.id || c.pixelCount >= maxArea * 0.25) continue;
+      const insideHeroBox =
+        c.minX >= hero.minX - padX &&
+        c.maxX <= hero.maxX + padX &&
+        c.minY >= hero.minY - padY &&
+        c.maxY <= hero.maxY + padY;
+      if (!insideHeroBox) continue;
+      const distToHero = Math.hypot(c.cx - hero.cx, c.cy - hero.cy);
+      const closerToDiscarded = discardedMajors.some(
+        (dm) => Math.hypot(c.cx - dm.cx, c.cy - dm.cy) < distToHero
+      );
+      if (!closerToDiscarded) {
+        keptIds.add(c.id);
+      }
+    }
+
     minAx = w;
     maxAx = 0;
     minAy = h;
     maxAy = 0;
+    let totalKeptPixels = 0;
     for (let y = 1; y < h - 1; y++) {
       for (let x = 1; x < w - 1; x++) {
         const i = y * w + x;
-        if (compId[i] !== hero.id) {
+        if (!keptIds.has(compId[i])) {
           bin[i] = 0;
           effectiveAlpha[i] = 0;
+          compId[i] = -1;
         } else {
+          // Merge preserved small sub-parts (e.g. detached trigger / barrel tip) into hero component 0
+          // so buildDepthField normalizes their u/v across the full weapon silhouette.
+          compId[i] = 0;
+          totalKeptPixels++;
           if (x < minAx) minAx = x;
           if (x > maxAx) maxAx = x;
           if (y < minAy) minAy = y;
@@ -1473,7 +1507,17 @@ export function buildSculptedMeshData(
         }
       }
     }
-    components = [hero];
+    components = [
+      {
+        ...hero,
+        id: 0,
+        pixelCount: totalKeptPixels || hero.pixelCount,
+        minX: minAx,
+        maxX: maxAx,
+        minY: minAy,
+        maxY: maxAy,
+      },
+    ];
   }
 
   const longAxisCells = Math.max(1, maxAx - minAx, maxAy - minAy);
@@ -1557,7 +1601,13 @@ export function buildSculptedMeshData(
         }
 
         const bodyCheck = analyzeComponents(candBodyBin, w, h);
-        const bodyHero = bodyCheck.components[0];
+        const bodyHero =
+          bodyCheck.components.length > 0
+            ? bodyCheck.components.reduce(
+                (best, c) => (c.pixelCount > best.pixelCount ? c : best),
+                bodyCheck.components[0]
+              )
+            : undefined;
         let origArea = 0;
         let bodyHeroArea = 0;
         if (bodyHero) {
@@ -1575,7 +1625,10 @@ export function buildSculptedMeshData(
           // Isolate only main connected magazine piece
           const magAnalyze = analyzeComponents(magBin, w, h);
           if (magAnalyze.components.length > 0) {
-            const heroMag = magAnalyze.components[0];
+            const heroMag = magAnalyze.components.reduce(
+              (best, c) => (c.pixelCount > best.pixelCount ? c : best),
+              magAnalyze.components[0]
+            );
             for (let i = 0; i < n; i++) {
               if (magBin[i] && magAnalyze.compId[i] !== heroMag.id) {
                 magBin[i] = 0;
@@ -1588,7 +1641,7 @@ export function buildSculptedMeshData(
               magSmooth,
               magBin,
               magAnalyze.compId,
-              [heroMag],
+              magAnalyze.components,
               w,
               h,
               scale,

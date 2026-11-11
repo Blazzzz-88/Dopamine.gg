@@ -246,4 +246,48 @@ describe('Constructeur de géométrie 3D d’armes', () => {
     expect(pistolMesh.bounds.depth).toBeLessThanOrEqual(0.32);
     expect(macMesh.bounds.depth).toBeGreaterThanOrEqual(0.50);
   });
+
+  it('conserve le fusil complet en mode Zombie même avec une détente flottante plus basse que le centre de gravité (AR-15 Hurlement de Braise) tout en isolant les lames doubles', () => {
+    const w = 180;
+    const h = 72;
+    const howlAlpha = new Float32Array(w * h);
+    // Corps AR-15 principal (x = 8..168, y = 14..32) + chargeur (x = 70..86, y = 33..58) + crosse/poignée
+    for (let y = 14; y <= 32; y++) {
+      for (let x = 8; x <= 168; x++) howlAlpha[y * w + x] = 1;
+    }
+    for (let y = 33; y <= 58; y++) {
+      for (let x = 70; x <= 86; x++) howlAlpha[y * w + x] = 1;
+    }
+    for (let y = 33; y <= 52; y++) {
+      for (let x = 104; x <= 116; x++) howlAlpha[y * w + x] = 1;
+    }
+    // Petite détente flottante isolée DANS le pontet, dont le cy est plus bas que celui du fusil
+    for (let y = 36; y <= 44; y++) {
+      for (let x = 93; x <= 96; x++) howlAlpha[y * w + x] = 1;
+    }
+
+    const rifleMesh = buildSculptedMeshData(howlAlpha, w, h, 'fusil', 'AR-15', {
+      singleHeroComponent: true,
+      separateMagazine: true,
+    });
+    expect(rifleMesh.bounds.width).toBeGreaterThan(3.5);
+    expect(rifleMesh.bounds.height).toBeGreaterThan(0.75);
+    expect(rifleMesh.magMeta?.isInternal).toBe(false);
+    expect(rifleMesh.magMeshData).toBeDefined();
+
+    // Cas des deux baïonnettes empilées : l'isolation FPS garde uniquement la lame inférieure
+    const twinAlpha = new Float32Array(w * h);
+    for (let y = 10; y <= 24; y++) {
+      for (let x = 16; x <= 156; x++) twinAlpha[y * w + x] = 1;
+    }
+    for (let y = 44; y <= 58; y++) {
+      for (let x = 22; x <= 162; x++) twinAlpha[y * w + x] = 1;
+    }
+    const twinMesh = buildSculptedMeshData(twinAlpha, w, h, 'lame', 'Couteau Baïonnette', {
+      singleHeroComponent: true,
+    });
+    expect(twinMesh.componentCount).toBe(1);
+    expect(twinMesh.bounds.width).toBeGreaterThan(3.5);
+    expect(twinMesh.bounds.height).toBeLessThan(0.6);
+  });
 });

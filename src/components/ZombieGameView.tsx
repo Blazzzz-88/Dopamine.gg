@@ -783,8 +783,20 @@ export const ZombieGameView: React.FC<ZombieGameViewProps> = ({
         firearmRestRef.current = entry.firearmRest;
         firearmAnimatorRef.current?.cancel();
         muzzleAnchor.position.copy(entry.muzzleMountPos);
-        viewModelRig.position.set(...cfg.rigPosHip);
-        viewModelRig.rotation.set(...cfg.rigRotBase);
+        if (entry.firearmAnim && entry.firearmRest) {
+          applyFirearmAnimPose(
+            viewModelRig,
+            weaponMount,
+            fpsHands,
+            entry.firearmRest,
+            cfg.rigPosHip,
+            cfg.rigRotBase,
+            entry.firearmAnim.update(0, performance.now())
+          );
+        } else {
+          viewModelRig.position.set(...cfg.rigPosHip);
+          viewModelRig.rotation.set(...cfg.rigRotBase);
+        }
       }
 
       stageRef.current?.setAttribute('data-weapon-ready', entry.item.weaponName);

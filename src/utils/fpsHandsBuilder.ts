@@ -345,6 +345,7 @@ function buildArticulatedArm(
   }) => {
     armRoot.visible = visible;
     armRoot.position.set(handPos[0], handPos[1], handPos[2]);
+    armRoot.rotation.set(0, 0, 0);
     handPivot.rotation.set(handRot[0], handRot[1], handRot[2]);
 
     fingers.forEach((f, idx) => {
