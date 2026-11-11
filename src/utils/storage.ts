@@ -42,6 +42,7 @@ export function createDefaultStats(): PlayerStats {
     totalWonValue: 0,
     upgradesAttempted: 0,
     upgradesWon: 0,
+    contractsCompleted: 0,
     bestDropValue: 0,
     bestDropName: null,
     rarityCounts: {

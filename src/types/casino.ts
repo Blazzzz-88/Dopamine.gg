@@ -10,7 +10,7 @@ export type WearTier =
 
 export type CategoryId = 'tactique' | 'cyber' | 'reliques';
 
-export type NavTab = 'boutique' | 'inventaire' | 'upgrader' | 'statistiques';
+export type NavTab = 'boutique' | 'inventaire' | 'upgrader' | 'contrat' | 'statistiques';
 
 export type EmblemType =
   | 'forest'
@@ -87,7 +87,7 @@ export interface InventoryItem {
   image?: string;
   obtainedAt: number;
   locked: boolean;
-  source: 'ouverture' | 'upgrade';
+  source: 'ouverture' | 'upgrade' | 'contrat';
 }
 
 export interface DropHistoryItem {
@@ -110,6 +110,7 @@ export interface PlayerStats {
   totalWonValue: number;
   upgradesAttempted: number;
   upgradesWon: number;
+  contractsCompleted?: number;
   bestDropValue: number;
   bestDropName: string | null;
   rarityCounts: Record<RarityId, number>;

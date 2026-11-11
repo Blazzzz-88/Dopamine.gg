@@ -387,4 +387,129 @@ describe('Client mount smoke test (jsdom + StrictMode)', () => {
     });
     container.remove();
   });
+
+  it('place le bouton Contrats à côté de Upgrader et exécute un contrat d’échange 5 Mythiques → 1 Légendaire avec roulette ciblée', async () => {
+    localStorage.clear();
+    const crate = CRATES[0]; // Ombre Boréale
+    const mythSkin = crate.skins.find((s) => s.rarity === 'mythique')!;
+    const secretSkin = crate.skins.find((s) => s.rarity === 'secret')!;
+    const expectedLegendaryNames = crate.skins
+      .filter((s) => s.rarity === 'legendaire')
+      .map((s) => s.name);
+
+    const mythItems = Array.from({ length: 5 }, (_, idx) => ({
+      ...createInventoryItem(crate, mythSkin, 'ouverture'),
+      instanceId: `myth_${idx}`,
+      obtainedAt: 1000 + idx,
+    }));
+    const secretItem = {
+      ...createInventoryItem(crate, secretSkin, 'ouverture'),
+      instanceId: 'secret_keep',
+      obtainedAt: 2000,
+    };
+
+    savePersistedState({
+      ...createInitialState(),
+      inventory: [...mythItems, secretItem],
+    });
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <StrictMode>
+          <App />
+        </StrictMode>
+      );
+    });
+    await new Promise((r) => setTimeout(r, 80));
+
+    // Vérifie que Contrats est bien placé juste à côté de Upgrader dans la barre de navigation
+    const navButtons = Array.from(container.querySelectorAll('header nav button')).map((b) =>
+      b.textContent?.trim()
+    );
+    const upgraderIdx = navButtons.findIndex((txt) => txt?.includes('Upgrader'));
+    const contractIdx = navButtons.findIndex((txt) => txt?.includes('Contrats'));
+    expect(upgraderIdx).toBeGreaterThanOrEqual(0);
+    expect(contractIdx).toBe(upgraderIdx + 1);
+
+    // Ouvrir l'onglet Contrats
+    const contractBtn = Array.from(container.querySelectorAll('header nav button')).find((b) =>
+      b.textContent?.includes('Contrats')
+    ) as HTMLButtonElement | undefined;
+    expect(contractBtn).toBeDefined();
+
+    await act(async () => {
+      contractBtn?.click();
+    });
+    for (let t = 0; t < 20; t++) {
+      if (container.innerHTML.includes('Contrat d’Échange')) break;
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 40));
+      });
+    }
+
+    expect(container.innerHTML).toContain('Contrat d’Échange');
+    expect(container.innerHTML).not.toContain(secretSkin.name);
+
+    // Activer le Mode Rapide pour accélérer le test de roulette
+    const turboBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Mode Rapide')
+    ) as HTMLButtonElement | undefined;
+    expect(turboBtn).toBeDefined();
+    await act(async () => {
+      turboBtn?.click();
+    });
+
+    // Auto-remplir les 5 skins Mythique
+    const autoFillBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Auto-remplir (5)')
+    ) as HTMLButtonElement | undefined;
+    expect(autoFillBtn).toBeDefined();
+    await act(async () => {
+      autoFillBtn?.click();
+    });
+    await new Promise((r) => setTimeout(r, 60));
+
+    expect(container.innerHTML).toContain('Skins Légendaire obtenables (3)');
+    expect(container.innerHTML).toContain('Ombre Boréale');
+
+    // Lancer le contrat (roulette)
+    const signBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Signer le Contrat')
+    ) as HTMLButtonElement | undefined;
+    expect(signBtn).toBeDefined();
+    expect(signBtn?.disabled).toBe(false);
+
+    await act(async () => {
+      signBtn?.click();
+    });
+
+    // Attendre la fin de la roulette rapide (1550ms) + délai modal (320ms)
+    for (let t = 0; t < 45; t++) {
+      const persistedNow = loadPersistedState();
+      if ((persistedNow.stats.contractsCompleted ?? 0) === 1) break;
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 60));
+      });
+    }
+
+    const finalState = loadPersistedState();
+    expect(finalState.stats.contractsCompleted).toBe(1);
+    // 5 mythiques consommés + 1 légendaire ajouté + 1 secret inchangé = 2 items
+    expect(finalState.inventory).toHaveLength(2);
+    const won = finalState.inventory.find((it) => it.source === 'contrat');
+    expect(won).toBeDefined();
+    expect(won?.rarity).toBe('legendaire');
+    expect(won?.crateId).toBe(crate.id);
+    expect(expectedLegendaryNames).toContain(won?.name);
+    expect(finalState.inventory.some((it) => it.instanceId === 'secret_keep')).toBe(true);
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+  });
 });

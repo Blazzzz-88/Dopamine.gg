@@ -4,6 +4,7 @@ import App from './App';
 import { CaseOpeningView } from './components/CaseOpeningView';
 import { InventoryView } from './components/InventoryView';
 import { UpgraderView } from './components/UpgraderView';
+import { ContractView } from './components/ContractView';
 import { StatsAndGuideView } from './components/StatsAndGuideView';
 import { CRATES } from './data/catalog';
 import { createInventoryItem } from './utils/rng';
@@ -69,6 +70,18 @@ describe('Rendu des composants principaux (SSR smoke test)', () => {
       />
     );
     expect(upgHtml).toContain('Upgrader Orbital');
+
+    const contractHtml = renderToStaticMarkup(
+      <ContractView
+        inventory={[sampleItem]}
+        onCompleteContract={() => {}}
+        onSellReward={() => {}}
+        onGoToShop={() => {}}
+      />
+    );
+    expect(contractHtml).toContain('Contrat d’Échange');
+    expect(contractHtml).toContain('Emplacements du contrat');
+    expect(contractHtml).toContain('Sélectionnez encore 5 skins');
 
     const statsHtml = renderToStaticMarkup(
       <StatsAndGuideView

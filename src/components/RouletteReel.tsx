@@ -15,6 +15,8 @@ interface RouletteReelProps {
   isSpinning: boolean;
   durationMs: number;
   jitterOffset: number;
+  needleColor?: string;
+  crateNameBySkinId?: Record<string, string>;
   onSpinComplete?: () => void;
 }
 
@@ -25,6 +27,8 @@ export const RouletteReel: React.FC<RouletteReelProps> = ({
   isSpinning,
   durationMs,
   jitterOffset,
+  needleColor,
+  crateNameBySkinId,
   onSpinComplete,
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -41,9 +45,13 @@ export const RouletteReel: React.FC<RouletteReelProps> = ({
     const containerWidth = container.clientWidth || 760;
     const initialX = -(3 * SLOT_STEP + CARD_WIDTH / 2 - containerWidth / 2);
 
-    if (!isSpinning || spinId === 0) {
+    if (spinId === 0) {
       setLanded(false);
       track.style.transform = `translate3d(${initialX}px, 0, 0)`;
+      return;
+    }
+
+    if (!isSpinning) {
       return;
     }
 
@@ -56,11 +64,14 @@ export const RouletteReel: React.FC<RouletteReelProps> = ({
     );
 
     let rafId = 0;
-    const startTime = performance.now();
+    let startTime: number | null = null;
     let lastTickSlot = -1;
 
     const tick = (now: number) => {
-      const elapsed = now - startTime;
+      if (startTime === null) {
+        startTime = now;
+      }
+      const elapsed = Math.max(0, now - startTime);
       const progress = Math.min(1, elapsed / durationMs);
       const eased = 1 - Math.pow(1 - progress, 4.2);
       const currentX = initialX + (targetX - initialX) * eased;
@@ -98,9 +109,29 @@ export const RouletteReel: React.FC<RouletteReelProps> = ({
 
       {/* Center Laser Needle */}
       <div className="pointer-events-none absolute inset-y-0 left-1/2 z-30 flex -translate-x-1/2 flex-col items-center justify-between">
-        <div className="h-3 w-3 -translate-y-1.5 rotate-45 bg-accent-400 shadow-[0_0_12px_var(--accent-400)]" />
-        <div className="h-full w-[2px] bg-gradient-to-b from-accent-300 via-accent-400/80 to-accent-300 shadow-[0_0_14px_var(--accent-400)]" />
-        <div className="h-3 w-3 translate-y-1.5 rotate-45 bg-accent-400 shadow-[0_0_12px_var(--accent-400)]" />
+        <div
+          className="h-3 w-3 -translate-y-1.5 rotate-45"
+          style={{
+            backgroundColor: needleColor ?? 'var(--accent-400)',
+            boxShadow: `0 0 12px ${needleColor ?? 'var(--accent-400)'}`,
+          }}
+        />
+        <div
+          className="h-full w-[2px]"
+          style={{
+            background: needleColor
+              ? `linear-gradient(to bottom, ${needleColor}, ${needleColor}cc, ${needleColor})`
+              : 'linear-gradient(to bottom, var(--accent-300), color-mix(in srgb, var(--accent-400) 80%, transparent), var(--accent-300))',
+            boxShadow: `0 0 14px ${needleColor ?? 'var(--accent-400)'}`,
+          }}
+        />
+        <div
+          className="h-3 w-3 translate-y-1.5 rotate-45"
+          style={{
+            backgroundColor: needleColor ?? 'var(--accent-400)',
+            boxShadow: `0 0 12px ${needleColor ?? 'var(--accent-400)'}`,
+          }}
+        />
       </div>
 
       {/* Track */}
@@ -161,7 +192,9 @@ export const RouletteReel: React.FC<RouletteReelProps> = ({
                   {skin.name}
                 </div>
                 <div className="truncate text-[10px] text-accent-200/55">
-                  {skin.weaponName}
+                  {crateNameBySkinId?.[skin.id]
+                    ? `${skin.weaponName} • ${crateNameBySkinId[skin.id]}`
+                    : skin.weaponName}
                 </div>
               </div>
             </div>

@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
+  ArrowLeftRight,
   Briefcase,
   Check,
   Coins,
@@ -36,6 +37,7 @@ interface InventoryViewProps {
   onSellBulk: (rarityOnly?: RarityId) => void;
   onToggleLock: (instanceId: string) => void;
   onSendToUpgrader: (instanceId: string) => void;
+  onSendToContract?: (instanceId: string) => void;
   onUpgradeStorage?: () => void;
   onGoToShop: () => void;
 }
@@ -53,6 +55,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   onSellBulk,
   onToggleLock,
   onSendToUpgrader,
+  onSendToContract,
   onUpgradeStorage,
   onGoToShop,
 }) => {
@@ -408,6 +411,15 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                         >
                           <ArrowUpRight className="h-3.5 w-3.5" />
                         </button>
+                        {onSendToContract && !item.locked && item.rarity !== 'secret' && (
+                          <button
+                            onClick={() => onSendToContract(item.instanceId)}
+                            title="Envoyer vers un Contrat d’échange"
+                            className="rounded-lg border border-accent-500/25 bg-accent-500/10 p-1.5 text-accent-300 transition hover:bg-accent-500/25"
+                          >
+                            <ArrowLeftRight className="h-3.5 w-3.5" />
+                          </button>
+                        )}
                         <button
                           disabled={item.locked}
                           onClick={() => onSellItem(item.instanceId)}

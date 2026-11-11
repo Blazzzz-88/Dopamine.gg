@@ -124,9 +124,9 @@ export const StatsAndGuideView: React.FC<StatsAndGuideViewProps> = ({
             },
             {
               icon: Sparkles,
-              title: '3. Upgrader Orbital',
+              title: '3. Upgrader & Contrats',
               delay: 440,
-              desc: 'Risquez un skin de votre inventaire sur la roue probabiliste pour viser une arme bien plus rare avec multiplicateur.',
+              desc: 'Risquez un skin sur l’Upgrader ou échangez 5 skins d’une même rareté (hors Secret) via un Contrat contre 1 skin de palier supérieur.',
             },
             {
               icon: Crosshair,

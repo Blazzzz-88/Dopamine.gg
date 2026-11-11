@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
+  ArrowLeftRight,
   Box,
   Briefcase,
   Sparkles,
@@ -39,6 +40,7 @@ const NAV_ITEMS: { id: NavTab; label: string; icon: React.ComponentType<{ classN
   { id: 'boutique', label: 'Caisses', icon: Box },
   { id: 'inventaire', label: 'Inventaire', icon: Briefcase },
   { id: 'upgrader', label: 'Upgrader', icon: Sparkles },
+  { id: 'contrat', label: 'Contrats', icon: ArrowLeftRight },
   { id: 'statistiques', label: 'Raretés & Stats', icon: BarChart3 },
 ];
 
@@ -128,7 +130,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </button>
 
         {/* Main Navigation Tabs */}
-        <nav className="order-3 flex w-full items-center justify-between gap-1 rounded-xl border border-accent-500/15 bg-surface-panel/90 p-1 lg:order-2 lg:w-auto lg:justify-center">
+        <nav className="order-3 flex w-full flex-wrap items-center justify-between gap-1 rounded-xl border border-accent-500/15 bg-surface-panel/90 p-1 lg:order-2 lg:w-auto lg:flex-nowrap lg:justify-center">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
@@ -136,7 +138,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 key={item.id}
                 onClick={() => onTabChange(item.id)}
-                className={`relative flex flex-1 items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-xs font-semibold transition-colors sm:text-sm lg:flex-initial ${
+                className={`relative flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2.5 py-2 text-[11px] font-semibold transition-colors sm:px-3.5 sm:text-sm lg:flex-initial ${
                   isActive
                     ? 'text-accent-950'
                     : 'text-accent-100/70 hover:text-accent-200'

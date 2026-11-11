@@ -33,6 +33,7 @@ import { CategorySection } from './components/CategorySection';
 import { CaseOpeningView } from './components/CaseOpeningView';
 import { InventoryView } from './components/InventoryView';
 import { UpgraderView } from './components/UpgraderView';
+import { ContractView } from './components/ContractView';
 import { StatsAndGuideView } from './components/StatsAndGuideView';
 import { ZombieGameView } from './components/ZombieGameView';
 import { WeaponInspectModal } from './components/WeaponInspectModal';
@@ -87,6 +88,7 @@ export function App() {
   const [activeTab, setActiveTab] = useState<NavTab>('boutique');
   const [activeCrate, setActiveCrate] = useState<CrateDefinition | null>(null);
   const [upgraderSeedId, setUpgraderSeedId] = useState<string | null>(null);
+  const [contractSeedId, setContractSeedId] = useState<string | null>(null);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [currentUser, setCurrentUser] = useState<SupabaseUser | null>(null);
   const [currentUsername, setCurrentUsername] = useState<string | null>(null);
@@ -367,6 +369,57 @@ export function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
+  const handleSendToContract = useCallback((instanceId: string) => {
+    soundEngine.playClick();
+    setContractSeedId(instanceId);
+    setActiveTab('contrat');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
+  const handleCompleteContract = useCallback(
+    (consumedInstanceIds: string[], wonItem: InventoryItem) => {
+      const consumedSet = new Set(consumedInstanceIds);
+      const dropEntry: DropHistoryItem = {
+        id: randomId('ctdrop'),
+        playerName: 'VOUS',
+        isPlayer: true,
+        crateName: `Contrat • ${wonItem.crateName}`,
+        skinName: wonItem.name,
+        weaponName: wonItem.weaponName,
+        weaponClass: wonItem.weaponClass,
+        rarity: wonItem.rarity,
+        value: wonItem.value,
+        timestamp: wonItem.obtainedAt,
+        seedHash: generateSeedHash(),
+      };
+      setTickerDrops((prev) => [dropEntry, ...prev.slice(0, 17)]);
+
+      setPersisted((prev) => ({
+        ...prev,
+        inventory: [
+          wonItem,
+          ...prev.inventory.filter((item) => !consumedSet.has(item.instanceId)),
+        ],
+        ...clearRemovedEquips(prev, consumedSet),
+        history: [dropEntry, ...prev.history.slice(0, 60)],
+        stats: {
+          ...prev.stats,
+          contractsCompleted: (prev.stats.contractsCompleted ?? 0) + 1,
+          totalWonValue: prev.stats.totalWonValue + wonItem.value,
+          bestDropValue: Math.max(prev.stats.bestDropValue, wonItem.value),
+          bestDropName:
+            wonItem.value > prev.stats.bestDropValue
+              ? `${wonItem.weaponName} | ${wonItem.name} (${RARITIES[wonItem.rarity].label})`
+              : prev.stats.bestDropName,
+        },
+      }));
+      pushToast(
+        `Contrat signé : ${wonItem.weaponName} | ${wonItem.name} (${RARITIES[wonItem.rarity].label}) !`
+      );
+    },
+    [pushToast]
+  );
+
   const handleConsumeUpgraderItem = useCallback((instanceId: string) => {
     setPersisted((prev) => ({
       ...prev,
@@ -503,6 +556,7 @@ export function App() {
   const handleResetSession = useCallback(() => {
     soundEngine.playClick();
     setUpgraderSeedId(null);
+    setContractSeedId(null);
     setTickerDrops(Array.from({ length: 10 }, () => generateSimulatedDrop()));
     setPersisted({
       ...createInitialState(),
@@ -629,6 +683,7 @@ export function App() {
                   onSellBulk={handleSellBulk}
                   onToggleLock={handleToggleLock}
                   onSendToUpgrader={handleSendToUpgrader}
+                  onSendToContract={handleSendToContract}
                   onUpgradeStorage={handleUpgradeStorage}
                   onGoToShop={() => handleTabChange('boutique')}
                 />
@@ -648,6 +703,26 @@ export function App() {
                   onConsumeItem={handleConsumeUpgraderItem}
                   onWinUpgrade={handleWinUpgrade}
                   onRecordAttempt={handleRecordUpgradeAttempt}
+                  onGoToShop={() => handleTabChange('boutique')}
+                />
+              </motion.div>
+            )}
+
+            {activeTab === 'contrat' && (
+              <motion.div
+                key="contrat"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+              >
+                <ContractView
+                  inventory={persisted.inventory}
+                  equippedWeaponId={persisted.equippedWeaponId}
+                  equippedKnifeId={persisted.equippedKnifeId}
+                  preselectedInstanceId={contractSeedId}
+                  onClearPreselected={() => setContractSeedId(null)}
+                  onCompleteContract={handleCompleteContract}
+                  onSellReward={(item) => handleSellItemsFromReveal([item], item.value)}
                   onGoToShop={() => handleTabChange('boutique')}
                 />
               </motion.div>
@@ -689,7 +764,7 @@ export function App() {
                 delayMs={300}
                 speedMs={42}
                 triggerOnView={true}
-                text="Modèles 3D interactifs, Upgrader probabiliste & mode Zombie FPS."
+                text="Modèles 3D interactifs, Upgrader, Contrats d’échange & mode Zombie FPS."
               />
             </div>
           </div>

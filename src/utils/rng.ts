@@ -73,7 +73,7 @@ export function generateWearAndFloat(): {
 export function createInventoryItem(
   crate: CrateDefinition,
   skin: SkinDefinition,
-  source: 'ouverture' | 'upgrade' = 'ouverture'
+  source: 'ouverture' | 'upgrade' | 'contrat' = 'ouverture'
 ): InventoryItem {
   const { wear, floatVal, multiplier } = generateWearAndFloat();
   const value = Math.max(5, Math.round(skin.baseValue * multiplier));
