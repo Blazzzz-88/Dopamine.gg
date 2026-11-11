@@ -1794,7 +1794,8 @@ export function buildSculptedMeshData(
  */
 function prepareWeaponTextures(
   img: HTMLImageElement,
-  archetype: WeaponArchetype
+  archetype: WeaponArchetype,
+  maxTextureSize = 2048
 ): {
   mapCanvas: HTMLCanvasElement;
   roughnessCanvas: HTMLCanvasElement;
@@ -1804,11 +1805,11 @@ function prepareWeaponTextures(
   gridW: number;
   gridH: number;
 } {
-  // Upsample source artwork cleanly toward ~2048px long edge for crisp fluid high-DPI textures
-  const targetMaxTex = 2048;
+  // Upsample source artwork cleanly toward target max edge (default 2048px, 1024px in fast FPS slot cache)
+  const targetMaxTex = clamp(maxTextureSize, 512, 2048);
   const maxSrcDim = Math.max(img.width, img.height, 1);
-  const scaleTex = clamp(targetMaxTex / maxSrcDim, 1.0, 2.5);
-  const clampedScale = maxSrcDim * scaleTex > 2048 ? 2048 / maxSrcDim : scaleTex;
+  const scaleTex = clamp(targetMaxTex / maxSrcDim, 0.5, 2.5);
+  const clampedScale = maxSrcDim * scaleTex > targetMaxTex ? targetMaxTex / maxSrcDim : scaleTex;
   const tw = Math.max(16, Math.round(img.width * clampedScale));
   const th = Math.max(16, Math.round(img.height * clampedScale));
 
@@ -2186,7 +2187,12 @@ export async function buildWeapon3DModel(
   weaponClass: WeaponClass,
   weaponName: string,
   maxAnisotropy = 16,
-  options?: { singleHeroComponent?: boolean; separateMagazine?: boolean; rarity?: RarityId }
+  options?: {
+    singleHeroComponent?: boolean;
+    separateMagazine?: boolean;
+    rarity?: RarityId;
+    maxTextureSize?: number;
+  }
 ): Promise<Weapon3DModel> {
   const img = await loadHtmlImage(imageSrc);
   const archetype = resolveWeaponArchetype(weaponClass, weaponName);
@@ -2198,7 +2204,7 @@ export async function buildWeapon3DModel(
     alphaGrid,
     gridW,
     gridH,
-  } = prepareWeaponTextures(img, archetype);
+  } = prepareWeaponTextures(img, archetype, options?.maxTextureSize ?? 2048);
 
   const meshData = buildSculptedMeshData(
     alphaGrid,

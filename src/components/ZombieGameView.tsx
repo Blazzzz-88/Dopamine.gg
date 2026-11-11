@@ -385,26 +385,31 @@ export const ZombieGameView: React.FC<ZombieGameViewProps> = ({
     if (st.gameOver) return;
     if (targetSlot === 1) {
       if (effectiveSlotRef.current === 1) return;
+      const primaryItem = loadoutRef.current.primary;
+      effectiveSlotRef.current = 1;
+      equippedRef.current = primaryItem;
       st.reloading = false;
       st.adsZoom = false;
       st.meleeSwing = 0;
       setReloading(false);
       soundEngine.playBoltRack(
-        resolveWeaponArchetype(
-          loadoutRef.current.primary.weaponClass,
-          loadoutRef.current.primary.weaponName
-        )
+        resolveWeaponArchetype(primaryItem.weaponClass, primaryItem.weaponName)
       );
+      swapWeaponFnRef.current?.(primaryItem);
       setActiveSlot(1);
       return;
     }
 
-    if (!loadoutRef.current.knife) return;
+    const knifeItem = loadoutRef.current.knife;
+    if (!knifeItem) return;
     if (effectiveSlotRef.current !== 2) {
+      effectiveSlotRef.current = 2;
+      equippedRef.current = knifeItem;
       st.reloading = false;
       st.adsZoom = false;
       firearmAnimatorRef.current?.cancel();
       setReloading(false);
+      swapWeaponFnRef.current?.(knifeItem);
       setActiveSlot(2);
     } else {
       const kAnim = knifeAnimatorRef.current;
@@ -589,77 +594,115 @@ export const ZombieGameView: React.FC<ZombieGameViewProps> = ({
     muzzleFlashGroup.add(flashFront, flashSideH, flashSideV);
     muzzleAnchor.add(muzzleFlashGroup);
 
+    interface CachedWeaponEntry {
+      key: string;
+      item: InventoryItem;
+      arch: WeaponArchetype;
+      isFirearm: boolean;
+      model: Weapon3DModel;
+      muzzleMountPos: THREE.Vector3;
+      knifeAnim: KnifeAnimator | null;
+      knifeRest: KnifeRigRestData | null;
+      firearmAnim: FirearmAnimator | null;
+      firearmRest: FirearmRigRestData | null;
+    }
+
+    const weaponCache = new Map<string, CachedWeaponEntry>();
+    const inFlightBuilds = new Map<string, Promise<CachedWeaponEntry | null>>();
     let activeWeaponModel: Weapon3DModel | null = null;
     let swapToken = 0;
+    let preloadTimerId: number | null = null;
 
-    const loadEquippedWeapon3D = (item: InventoryItem) => {
-      if (!item.image) return;
-      const token = ++swapToken;
-      const arch = resolveWeaponArchetype(item.weaponClass, item.weaponName);
+    const getWeaponCacheKey = (item: InventoryItem) =>
+      `${item.instanceId}::${item.image ?? ''}::${item.weaponName}::${item.rarity}`;
 
-      if (arch === 'karambit' || arch === 'couteau') {
-        const knifeType = resolveKnifeType(item.weaponName);
-        knifeAnimatorRef.current = createKnifeAnimator(knifeType);
-        firearmAnimatorRef.current = null;
-        firearmRestRef.current = null;
-      } else {
-        knifeAnimatorRef.current = null;
-        knifeRestRef.current = null;
-        firearmAnimatorRef.current = createFirearmAnimator(arch);
-        firearmRestRef.current = null;
+    const warmEntryGpu = (group: THREE.Group) => {
+      try {
+        if (typeof renderer.initTexture !== 'function') return;
+        const seen = new Set<THREE.Texture>();
+        group.traverse((obj) => {
+          if (
+            obj instanceof THREE.Mesh &&
+            !Array.isArray(obj.material) &&
+            obj.material instanceof THREE.MeshPhysicalMaterial
+          ) {
+            const m = obj.material;
+            for (const tex of [m.map, m.roughnessMap, m.metalnessMap, m.normalMap]) {
+              if (tex && !seen.has(tex)) {
+                seen.add(tex);
+                renderer.initTexture(tex);
+              }
+            }
+          }
+        });
+      } catch {
+        // Ignorer en environnement headless/mock sans contexte WebGL réel
       }
-      stageRef.current?.setAttribute('data-weapon-loading', '1');
+    };
 
+    const ensureWeaponEntry = (
+      item: InventoryItem,
+      isCurrentTarget: () => boolean
+    ): Promise<CachedWeaponEntry | null> => {
+      if (!item.image) return Promise.resolve(null);
+      const key = getWeaponCacheKey(item);
+      const existing = weaponCache.get(key);
+      if (existing) return Promise.resolve(existing);
+
+      const pending = inFlightBuilds.get(key);
+      if (pending) return pending;
+
+      const arch = resolveWeaponArchetype(item.weaponClass, item.weaponName);
       const isFirearm = arch !== 'karambit' && arch !== 'couteau';
-      buildWeapon3DModel(item.image, item.weaponClass, item.weaponName, maxAniso, {
+
+      const buildPromise = buildWeapon3DModel(item.image, item.weaponClass, item.weaponName, maxAniso, {
         singleHeroComponent: true,
         separateMagazine: isFirearm,
         rarity: item.rarity,
+        maxTextureSize: 1024,
       })
-        .then((built) => {
-          if (cancelled || token !== swapToken) {
+        .then((built): CachedWeaponEntry | null => {
+          inFlightBuilds.delete(key);
+          if (cancelled) {
             built.dispose();
-            return;
+            return null;
           }
-          if (activeWeaponModel) {
-            weaponMount.remove(activeWeaponModel.group);
-            activeWeaponModel.dispose();
-          }
-          weaponMount.position.set(0, 0, 0);
-          weaponMount.quaternion.identity();
-          weaponMount.scale.set(1, 1, 1);
 
-          activeWeaponModel = built;
+          const shouldRestoreCurrent = !isCurrentTarget() && activeWeaponModel !== null;
+          const curArch = resolveWeaponArchetype(
+            equippedRef.current.weaponClass,
+            equippedRef.current.weaponName
+          );
+
+          built.group.visible = false;
           applyWeaponViewPose(built.group, arch, fpsHands, built.gripMeta);
           weaponMount.add(built.group);
 
+          const muzzleMountPos = new THREE.Vector3(0, 0.04, -0.45);
           if (built.muzzleLocalPos && isFirearm) {
             built.group.updateMatrix();
-            muzzleAnchor.position
+            muzzleMountPos
               .set(built.muzzleLocalPos[0], built.muzzleLocalPos[1], built.muzzleLocalPos[2])
               .applyMatrix4(built.group.matrix);
           }
-          muzzleFlashGroup.visible = false;
-          gameStateRef.current.muzzleFlashTimer = 0;
+
+          let knifeAnim: KnifeAnimator | null = null;
+          let knifeRest: KnifeRigRestData | null = null;
+          let firearmAnim: FirearmAnimator | null = null;
+          let firearmRest: FirearmRigRestData | null = null;
 
           if (!isFirearm) {
-            const kAnim = knifeAnimatorRef.current ?? createKnifeAnimator(resolveKnifeType(item.weaponName));
-            knifeAnimatorRef.current = kAnim;
-            knifeRestRef.current = captureKnifeRigRestData(
+            knifeAnim = createKnifeAnimator(resolveKnifeType(item.weaponName));
+            knifeRest = captureKnifeRigRestData(
               arch,
               getFPSWeaponViewConfig(arch),
               fpsHands,
               built.group,
               built.gripMeta
             );
-            kAnim.triggerDraw();
-            soundEngine.playKnifeDraw(kAnim.knifeType);
-            firearmRestRef.current = null;
           } else {
-            knifeRestRef.current = null;
-            const fAnim = firearmAnimatorRef.current ?? createFirearmAnimator(arch);
-            firearmAnimatorRef.current = fAnim;
-            firearmRestRef.current = captureFirearmRigRestData(
+            firearmAnim = createFirearmAnimator(arch);
+            firearmRest = captureFirearmRigRestData(
               arch,
               getFPSWeaponViewConfig(arch),
               built.group,
@@ -668,11 +711,137 @@ export const ZombieGameView: React.FC<ZombieGameViewProps> = ({
             );
           }
 
-          stageRef.current?.setAttribute('data-weapon-ready', item.weaponName);
-          stageRef.current?.removeAttribute('data-weapon-loading');
+          if (shouldRestoreCurrent) {
+            fpsHands.applyPose(curArch);
+          }
+
+          warmEntryGpu(built.group);
+
+          const entry: CachedWeaponEntry = {
+            key,
+            item,
+            arch,
+            isFirearm,
+            model: built,
+            muzzleMountPos,
+            knifeAnim,
+            knifeRest,
+            firearmAnim,
+            firearmRest,
+          };
+          weaponCache.set(key, entry);
+          return entry;
         })
         .catch(() => {
+          inFlightBuilds.delete(key);
+          return null;
+        });
+
+      inFlightBuilds.set(key, buildPromise);
+      return buildPromise;
+    };
+
+    const activateWeaponEntry = (entry: CachedWeaponEntry) => {
+      for (const cached of weaponCache.values()) {
+        cached.model.group.visible = cached === entry;
+      }
+      weaponMount.position.set(0, 0, 0);
+      weaponMount.quaternion.identity();
+      weaponMount.scale.set(1, 1, 1);
+
+      activeWeaponModel = entry.model;
+      applyWeaponViewPose(entry.model.group, entry.arch, fpsHands, entry.model.gripMeta);
+
+      muzzleFlashGroup.visible = false;
+      gameStateRef.current.muzzleFlashTimer = 0;
+
+      const cfg = getFPSWeaponViewConfig(entry.arch);
+      if (!entry.isFirearm) {
+        firearmAnimatorRef.current = null;
+        firearmRestRef.current = null;
+        knifeAnimatorRef.current = entry.knifeAnim;
+        knifeRestRef.current = entry.knifeRest;
+        if (entry.knifeAnim) {
+          entry.knifeAnim.triggerDraw();
+          soundEngine.playKnifeDraw(entry.knifeAnim.knifeType);
+          if (entry.knifeRest) {
+            applyKnifeAnimPose(
+              viewModelRig,
+              weaponMount,
+              fpsHands,
+              entry.knifeRest,
+              cfg.rigPosHip,
+              cfg.rigRotBase,
+              entry.knifeAnim.update(0, performance.now())
+            );
+          }
+        }
+      } else {
+        knifeAnimatorRef.current = null;
+        knifeRestRef.current = null;
+        firearmAnimatorRef.current = entry.firearmAnim;
+        firearmRestRef.current = entry.firearmRest;
+        firearmAnimatorRef.current?.cancel();
+        muzzleAnchor.position.copy(entry.muzzleMountPos);
+        viewModelRig.position.set(...cfg.rigPosHip);
+        viewModelRig.rotation.set(...cfg.rigRotBase);
+      }
+
+      stageRef.current?.setAttribute('data-weapon-ready', entry.item.weaponName);
+      stageRef.current?.removeAttribute('data-weapon-loading');
+    };
+
+    const scheduleOtherSlotPreload = () => {
+      if (preloadTimerId !== null) window.clearTimeout(preloadTimerId);
+      preloadTimerId = window.setTimeout(() => {
+        preloadTimerId = null;
+        if (cancelled) return;
+        const lo = loadoutRef.current;
+        const candidates = [lo.primary, lo.knife].filter(Boolean) as InventoryItem[];
+        for (const cand of candidates) {
+          if (cand.image && typeof Image !== 'undefined') {
+            const imgPre = new Image();
+            imgPre.src = cand.image;
+          }
+          if (!weaponCache.has(getWeaponCacheKey(cand))) {
+            void ensureWeaponEntry(cand, () => false);
+          }
+        }
+      }, 60);
+    };
+
+    const loadEquippedWeapon3D = (item: InventoryItem) => {
+      if (!item.image) return;
+      const token = ++swapToken;
+      const key = getWeaponCacheKey(item);
+      const cached = weaponCache.get(key);
+      if (cached) {
+        if (activeWeaponModel === cached.model) {
+          stageRef.current?.setAttribute('data-weapon-ready', item.weaponName);
           stageRef.current?.removeAttribute('data-weapon-loading');
+          return;
+        }
+        // Changement de slot instantané (0 reconstruction géométrique, 0 upload GPU)
+        activateWeaponEntry(cached);
+        return;
+      }
+
+      stageRef.current?.setAttribute('data-weapon-loading', '1');
+      ensureWeaponEntry(item, () => !cancelled && token === swapToken)
+        .then((entry) => {
+          if (cancelled || token !== swapToken || !entry) {
+            if (!cancelled && token === swapToken) {
+              stageRef.current?.removeAttribute('data-weapon-loading');
+            }
+            return;
+          }
+          activateWeaponEntry(entry);
+          scheduleOtherSlotPreload();
+        })
+        .catch(() => {
+          if (!cancelled && token === swapToken) {
+            stageRef.current?.removeAttribute('data-weapon-loading');
+          }
         });
     };
 
@@ -1388,6 +1557,7 @@ export const ZombieGameView: React.FC<ZombieGameViewProps> = ({
       knifeRestRef.current = null;
       firearmAnimatorRef.current = null;
       firearmRestRef.current = null;
+      if (preloadTimerId !== null) window.clearTimeout(preloadTimerId);
       if (rafId) cancelAnimationFrame(rafId);
       suppressPointerExitRef.current = true;
       if (document.pointerLockElement === renderer.domElement) {
@@ -1405,7 +1575,13 @@ export const ZombieGameView: React.FC<ZombieGameViewProps> = ({
       renderer.domElement.removeEventListener('contextmenu', onContextMenu);
       renderer.domElement.removeEventListener('dragstart', onPreventDrag);
 
-      activeWeaponModel?.dispose();
+      for (const entry of weaponCache.values()) {
+        weaponMount.remove(entry.model.group);
+        entry.model.dispose();
+      }
+      weaponCache.clear();
+      inFlightBuilds.clear();
+      activeWeaponModel = null;
       fpsHands.dispose();
       for (const z of zombies) disposeZombie(z);
       zombieAssetBank.dispose();

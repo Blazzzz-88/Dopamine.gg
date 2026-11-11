@@ -68,7 +68,11 @@ export function App() {
   const [persisted, setPersisted] = useState<PersistedState>(() => {
     // Si l'utilisateur avait l'ancien pack valorant pré-chargé, vider pour démarrer propre
     const state = loadPersistedState();
-    if (localStorage.getItem('personal_valo_pack_granted_v1') && state.inventory.length > 0) {
+    if (
+      typeof localStorage !== 'undefined' &&
+      localStorage.getItem('personal_valo_pack_granted_v1') &&
+      state.inventory.length > 0
+    ) {
       localStorage.removeItem('personal_valo_pack_granted_v1');
       return {
         ...state,
