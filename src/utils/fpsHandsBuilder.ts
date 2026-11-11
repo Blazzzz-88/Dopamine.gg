@@ -82,8 +82,8 @@ export function getFPSWeaponViewConfig(archetype: WeaponArchetype): FPSWeaponVie
       scale: 0.054,
       weaponPos: [-0.046, -0.008, 0.012],
       weaponRotOffset: [2.98, 2.41, -0.35],
-      rigPosHip: [0.195, -0.132, -0.44],
-      rigPosAds: [0.195, -0.132, -0.44],
+      rigPosHip: [0.155, -0.088, -0.40],
+      rigPosAds: [0.155, -0.088, -0.40],
       rigRotBase: [-0.015, 0.13, 0],
     };
   }
@@ -480,21 +480,21 @@ export function getBaseArmHolds(archetype: WeaponArchetype): {
   const isKarambit = archetype === 'karambit';
   return {
     right: {
-      handPos: isKarambit ? [-0.002, -0.004, 0.036] : [-0.004, -0.004, 0.044],
-      handRot: isKarambit ? [1.2208, 0.4818, -1.8218] : [-0.24, 0.30, -1.44],
-      shoulderTarget: [0.27, -0.22, 0.42],
-      proxCurl: isKarambit ? -1.66 : -1.62,
-      distCurl: isKarambit ? -1.44 : -1.40,
-      indexCurl: isKarambit ? -1.52 : undefined,
-      thumbRot: isKarambit ? [0.24, -0.34, 0.22] : [0.14, -0.30, 0.20],
+      handPos: isKarambit ? [-0.004, -0.002, 0.032] : [-0.004, -0.016, 0.048],
+      handRot: isKarambit ? [1.14, 0.44, -1.78] : [-0.86, 0.20, -1.34],
+      shoulderTarget: isKarambit ? [0.34, -0.21, 0.34] : [0.27, -0.22, 0.42],
+      proxCurl: isKarambit ? -1.66 : -1.64,
+      distCurl: isKarambit ? -1.44 : -1.42,
+      indexCurl: -1.52,
+      thumbRot: isKarambit ? [0.24, -0.34, 0.22] : [0.20, -0.32, 0.22],
       visible: true,
     },
     left: {
-      handPos: isKarambit ? [-0.24, -0.026, -0.03] : [-0.22, -0.036, -0.03],
-      handRot: isKarambit ? [-0.28, -0.45, 0.92] : [-0.28, -0.42, 0.88],
+      handPos: isKarambit ? [-0.26, -0.072, 0.01] : [-0.26, -0.075, 0.02],
+      handRot: isKarambit ? [-0.28, -0.42, 0.96] : [-0.26, -0.40, 0.90],
       shoulderTarget: [-0.46, -0.24, 0.34],
-      proxCurl: -0.62,
-      distCurl: -0.52,
+      proxCurl: -0.98,
+      distCurl: -0.84,
       thumbRot: [0.14, 0.18, -0.16],
       visible: true,
     },

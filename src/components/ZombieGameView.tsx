@@ -527,8 +527,8 @@ export const ZombieGameView: React.FC<ZombieGameViewProps> = ({
       setActiveSlot(2);
     } else {
       const kAnim = knifeAnimatorRef.current;
-      if (kAnim) {
-        kAnim.triggerDraw();
+      if (kAnim && kAnim.getState() !== 'attack1' && kAnim.getState() !== 'attack2') {
+        kAnim.triggerDraw(false);
         soundEngine.playKnifeDraw(kAnim.knifeType);
       }
     }
@@ -876,7 +876,7 @@ export const ZombieGameView: React.FC<ZombieGameViewProps> = ({
         knifeAnimatorRef.current = entry.knifeAnim;
         knifeRestRef.current = entry.knifeRest;
         if (entry.knifeAnim) {
-          entry.knifeAnim.triggerDraw();
+          entry.knifeAnim.triggerDraw(true);
           soundEngine.playKnifeDraw(entry.knifeAnim.knifeType);
           if (entry.knifeRest) {
             applyKnifeAnimPose(

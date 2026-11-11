@@ -22,6 +22,8 @@ import crateMatriceSaphirImg from '../assets/crates/matrice-saphir.jpg';
 import crateReacteurPlasmaImg from '../assets/crates/reacteur-plasma.jpg';
 import crateEmpireDorImg from '../assets/crates/empire-dor.jpg';
 import crateAbyssePrismatiqueImg from '../assets/crates/abysse-prismatique.jpg';
+import crateProtocoleRadiantImg from '../assets/crates/protocole-radiant.jpg';
+import cratePantheonChampionsImg from '../assets/crates/pantheon-champions.jpg';
 import valoAwpGlitchImg from '../../skins_valo/awp_glitch_valo.webp';
 import valoAwpReaverImg from '../../skins_valo/awp_reaver_valo.webp';
 import valoAwpDragonImg from '../../skins_valo/awp_valo.webp';
@@ -381,6 +383,7 @@ export const CRATES: CrateDefinition[] = [
     accentColor: '#F43F5E',
     secondaryColor: '#0F172A',
     emblemType: 'radiant',
+    image: crateProtocoleRadiantImg,
     skins: buildSkins('protocole-radiant', 75000, [
       // 3 Communes
       ['Chute de Neige', 'Deagle', 'pistolet', 'commune', 0.28, ['#93C5FD', '#E2E8F0', '#38BDF8'], 'Deagle givré renfermant un village d’hiver lumineux sous verre.', valoSnowDeagleImg],
@@ -411,6 +414,7 @@ export const CRATES: CrateDefinition[] = [
     accentColor: '#FACC15',
     secondaryColor: '#1E1B4B',
     emblemType: 'champions',
+    image: cratePantheonChampionsImg,
     skins: buildSkins('pantheon-champions', 100000, [
       // 2 Communes
       ['Prime Impérial', 'AK-47', 'fusil', 'commune', 0.30, ['#FACC15', '#18181B', '#7E22CE'], 'AK-47 futuriste blanc nacré, noir carbone et rail d’or géométrique.', valoPrimeVandalImg],

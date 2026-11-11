@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { buildSculptedMeshData, resolveWeaponArchetype } from './weapon3dBuilder';
 import { WeaponClass } from '../types/casino';
@@ -289,5 +290,36 @@ describe('Constructeur de géométrie 3D d’armes', () => {
     expect(twinMesh.componentCount).toBe(1);
     expect(twinMesh.bounds.width).toBeGreaterThan(3.5);
     expect(twinMesh.bounds.height).toBeLessThan(0.6);
+  });
+
+  it('calcule des axes handleAxis/bladeDir orthogonaux et détecte la poignée côté pommeau large sur dagues/katanas inclinés', () => {
+    const w = 160;
+    const h = 110;
+    const diagDagger = new Float32Array(w * h);
+    // Dague diagonale bas-gauche (pointe fine x=20,y=86) -> haut-droite (poignée large x=138,y=24)
+    for (let s = 0; s <= 120; s++) {
+      const t = s / 120;
+      const cx = Math.round(20 + t * 118);
+      const cy = Math.round(86 - t * 62);
+      const halfThick = t < 0.45 ? Math.max(1, Math.round(t * 14)) : Math.abs(t - 0.48) < 0.05 ? 16 : 9;
+      for (let dy = -halfThick; dy <= halfThick; dy++) {
+        for (let dx = -2; dx <= 2; dx++) {
+          const px = cx + dx;
+          const py = cy + dy;
+          if (px >= 2 && px < w - 2 && py >= 2 && py < h - 2) {
+            diagDagger[py * w + px] = 1;
+          }
+        }
+      }
+    }
+    const daggerMesh = buildSculptedMeshData(diagDagger, w, h, 'lame', 'Dague');
+    expect(daggerMesh.gripMeta).toBeDefined();
+    const ha = new THREE.Vector3(...daggerMesh.gripMeta!.handleAxis);
+    const bd = new THREE.Vector3(...daggerMesh.gripMeta!.bladeDir);
+    // Strictement orthogonaux même avec inclinaison diagonale
+    expect(Math.abs(ha.dot(bd))).toBeLessThan(1e-5);
+    // handleAxis pointe de la poignée (haut-droite, X>0) vers la lame (bas-gauche, X<0)
+    expect(ha.x).toBeLessThan(-0.5);
+    expect(daggerMesh.gripMeta!.gripLocalPos[0]).toBeGreaterThan(0.3);
   });
 });

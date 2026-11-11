@@ -127,22 +127,45 @@ class SoundEngine {
     }
   }
 
-  playMeleeSlash(heavy = false, knifeType: 'karambit' | 'baionnette' | 'couteau' = 'couteau') {
+  playMeleeSlash(
+    heavy = false,
+    knifeType: 'karambit' | 'baionnette' | 'katana' | 'dague' | 'couteau' = 'couteau'
+  ) {
     if (heavy) {
-      const base = knifeType === 'karambit' ? 460 : knifeType === 'baionnette' ? 340 : 400;
-      this.playTone(base, 0.14, 'triangle', 0.055, 0, 120);
-      this.playTone(1350, 0.09, 'sine', 0.022, 0.03, 760);
+      const base =
+        knifeType === 'karambit'
+          ? 460
+          : knifeType === 'katana'
+          ? 290
+          : knifeType === 'baionnette'
+          ? 340
+          : 410;
+      this.playTone(base, knifeType === 'katana' ? 0.17 : 0.14, 'triangle', 0.055, 0, 120);
+      this.playTone(knifeType === 'katana' ? 1580 : 1350, 0.10, 'sine', 0.024, 0.03, 760);
     } else {
-      const base = knifeType === 'karambit' ? 660 : knifeType === 'baionnette' ? 480 : 560;
+      const base =
+        knifeType === 'karambit'
+          ? 660
+          : knifeType === 'katana'
+          ? 430
+          : knifeType === 'baionnette'
+          ? 480
+          : 580;
       this.playTone(base, 0.085, 'sine', 0.042, 0, 185);
       this.playTone(1180, 0.045, 'triangle', 0.016, 0.01, 680);
     }
   }
 
-  playKnifeDraw(knifeType: 'karambit' | 'baionnette' | 'couteau' = 'couteau') {
+  playKnifeDraw(
+    knifeType: 'karambit' | 'baionnette' | 'katana' | 'dague' | 'couteau' = 'couteau'
+  ) {
     if (knifeType === 'karambit') {
       this.playTone(980, 0.09, 'triangle', 0.025, 0.02, 1620);
       this.playTone(620, 0.045, 'sine', 0.03, 0.48, 420);
+    } else if (knifeType === 'katana') {
+      this.playTone(640, 0.16, 'sine', 0.026, 0.02, 1480);
+      this.playTone(1240, 0.08, 'triangle', 0.018, 0.12, 920);
+      this.playTone(320, 0.055, 'triangle', 0.034, 0.56, 210);
     } else if (knifeType === 'baionnette') {
       this.playTone(720, 0.11, 'triangle', 0.024, 0.02, 1120);
       this.playTone(380, 0.05, 'triangle', 0.038, 0.50, 220);

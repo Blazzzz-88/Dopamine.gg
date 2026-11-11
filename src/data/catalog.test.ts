@@ -107,8 +107,8 @@ describe('Catalogue & Raretés du casino fictif', () => {
     expect(c100).toBeDefined();
     expect(c75.skins).toHaveLength(10);
     expect(c100.skins).toHaveLength(10);
-    expect(c75.image).toBeUndefined();
-    expect(c100.image).toBeUndefined();
+    expect(c75.image).toBeTruthy();
+    expect(c100.image).toBeTruthy();
 
     // Raretés nommées dans les fichiers respectées
     expect(c75.skins.find((s) => s.weaponName === 'Katana')?.rarity).toBe('legendaire');

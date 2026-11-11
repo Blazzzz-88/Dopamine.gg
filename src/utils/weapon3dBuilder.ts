@@ -16,6 +16,10 @@ export interface WeaponGripMeta {
   gripLocalPos: [number, number, number];
   handleAxis: [number, number, number];
   bladeDir: [number, number, number];
+  /** Optional local ring hole center (karambits) for finger-ring twirl pivots */
+  ringLocalPos?: [number, number, number];
+  /** Local cross-section handle height around gripLocalPos for uniform hand-fit scaling */
+  handleThicknessLocal?: number;
 }
 
 export interface WeaponMagMeta {
@@ -171,6 +175,9 @@ interface ComponentMeta {
   localHeight: number;
   guardU: number;
   spineSign: number; // +1 or -1 in local V indicating spine / ring side vs cutting edge
+  narrowTipSide: 'left' | 'right';
+  leftHalfArea: number;
+  rightHalfArea: number;
 }
 
 function analyzeComponents(
@@ -292,18 +299,23 @@ function analyzeComponents(
     const uSpan = Math.max(1, maxU - minU);
     const bMinV = new Float32Array(buckets).fill(1e9);
     const bMaxV = new Float32Array(buckets).fill(-1e9);
+    let leftHalfArea = 0;
+    let rightHalfArea = 0;
     for (const p of pixels) {
       const dx = (p % w) - cx;
       const dy = (p - (p % w)) / w - cy;
       const lu = dx * cosA + dy * sinA;
       const lv = -dx * sinA + dy * cosA;
-      const b = clamp(Math.floor(((lu - minU) / uSpan) * (buckets - 1)), 0, buckets - 1);
+      const luNorm = (lu - minU) / uSpan;
+      if (luNorm < 0.45) leftHalfArea++;
+      else if (luNorm > 0.55) rightHalfArea++;
+      const b = clamp(Math.floor(luNorm * (buckets - 1)), 0, buckets - 1);
       if (lv < bMinV[b]) bMinV[b] = lv;
       if (lv > bMaxV[b]) bMaxV[b] = lv;
     }
-    const guardLoB = bladeVariant === 'katana' ? Math.floor(buckets * 0.56) : 2;
+    const guardLoB = bladeVariant === 'katana' ? Math.floor(buckets * 0.62) : 2;
     const guardHiB = bladeVariant === 'katana' ? Math.floor(buckets * 0.80) : buckets - 3;
-    let bestGuardB = bladeVariant === 'katana' ? Math.floor(buckets * 0.68) : Math.floor(buckets * 0.36);
+    let bestGuardB = bladeVariant === 'katana' ? Math.floor(buckets * 0.70) : Math.floor(buckets * 0.36);
     let bestGuardSpan = -1;
     for (let b = guardLoB; b <= guardHiB; b++) {
       const span = bMaxV[b] - bMinV[b];
@@ -315,8 +327,29 @@ function analyzeComponents(
     const guardU = bestGuardB / (buckets - 1);
     const guardTopReach = Math.abs(bMinV[bestGuardB]);
     const guardBotReach = Math.abs(bMaxV[bestGuardB]);
-    // On an M9 bayonet, the muzzle ring side of the crossguard protrudes further than the bottom quillon
-    const spineSign = guardTopReach >= guardBotReach ? -1 : 1;
+    // On an M9 bayonet, the muzzle ring side of the crossguard protrudes further than the bottom quillon;
+    // on Katana, the scabbard hangs on the bottom (+lv) side so keep top (-lv) as upward spine/edge.
+    const spineSign = bladeVariant === 'katana' ? -1 : guardTopReach >= guardBotReach ? -1 : 1;
+
+    let leftEndSum = 0;
+    let leftEndCnt = 0;
+    let rightEndSum = 0;
+    let rightEndCnt = 0;
+    for (let b = 1; b <= 5; b++) {
+      if (bMaxV[b] >= bMinV[b]) {
+        leftEndSum += bMaxV[b] - bMinV[b];
+        leftEndCnt++;
+      }
+    }
+    for (let b = buckets - 6; b <= buckets - 2; b++) {
+      if (bMaxV[b] >= bMinV[b]) {
+        rightEndSum += bMaxV[b] - bMinV[b];
+        rightEndCnt++;
+      }
+    }
+    const leftEndSpan = leftEndCnt > 0 ? leftEndSum / leftEndCnt : 0;
+    const rightEndSpan = rightEndCnt > 0 ? rightEndSum / rightEndCnt : 0;
+    const narrowTipSide: 'left' | 'right' = leftEndSpan < rightEndSpan ? 'left' : 'right';
 
     kept.push({
       id: newIdx,
@@ -333,6 +366,9 @@ function analyzeComponents(
       localHeight: maxV - minV,
       guardU,
       spineSign,
+      narrowTipSide,
+      leftHalfArea,
+      rightHalfArea,
     });
   }
 
@@ -1720,7 +1756,7 @@ export function buildSculptedMeshData(
 
   let gripMeta: WeaponGripMeta | undefined;
   if (archetype === 'karambit') {
-    const sampleColMid = (u: number): [number, number] => {
+    const sampleColSpan = (u: number): [number, number, number] => {
       const x = clamp(Math.round(minAx + u * (maxAx - minAx)), 1, w - 2);
       let y0 = -1;
       let y1 = -1;
@@ -1730,14 +1766,44 @@ export function buildSculptedMeshData(
           y1 = y;
         }
       }
-      if (y0 < 0) return [toWorldX(x), 0];
-      return [toWorldX(x), toWorldY(0.5 * (y0 + y1))];
+      if (y0 < 0) return [toWorldX(x), 0, 0.85];
+      return [toWorldX(x), toWorldY(0.5 * (y0 + y1)), Math.max(0.35, (y1 - y0 + 1) * scale)];
     };
-    const [x1, y1] = sampleColMid(0.55);
-    const [xm, ym] = sampleColMid(0.68);
-    const [xr, yr] = sampleColMid(0.90);
-    const dx = xr - x1;
-    const dy = yr - y1;
+
+    // Locate the enclosed finger ring hole center cleanly for all Karambit aspect ratios (incl. 1:1 Champions)
+    let ringSumX = 0;
+    let ringSumY = 0;
+    let ringCnt = 0;
+    const rxLo = clamp(Math.round(minAx + 0.68 * (maxAx - minAx)), 1, w - 2);
+    const rxHi = clamp(Math.round(minAx + 0.98 * (maxAx - minAx)), rxLo, w - 2);
+    for (let x = rxLo; x <= rxHi; x++) {
+      let yTop = -1;
+      let yBot = -1;
+      for (let y = minAy; y <= maxAy; y++) {
+        if (bin[y * w + x]) {
+          if (yTop < 0) yTop = y;
+          yBot = y;
+        }
+      }
+      if (yTop >= 0 && yBot - yTop > 6) {
+        for (let y = yTop + 1; y < yBot; y++) {
+          if (!bin[y * w + x]) {
+            ringSumX += x;
+            ringSumY += y;
+            ringCnt++;
+          }
+        }
+      }
+    }
+
+    const [xrFallback, yrFallback] = sampleColSpan(0.87);
+    const ringWorldX = ringCnt > 12 ? toWorldX(ringSumX / ringCnt) : xrFallback;
+    const ringWorldY = ringCnt > 12 ? toWorldY(ringSumY / ringCnt) : yrFallback;
+
+    const [x1, y1, th1] = sampleColSpan(0.52);
+    const [xm, ym, th2] = sampleColSpan(0.62);
+    const dx = ringWorldX - x1;
+    const dy = ringWorldY - y1;
     const len = Math.hypot(dx, dy) || 1;
     const hx = dx / len;
     const hy = dy / len;
@@ -1745,13 +1811,37 @@ export function buildSculptedMeshData(
       gripLocalPos: [xm, ym, 0],
       handleAxis: [hx, hy, 0],
       bladeDir: [hy, -hx, 0],
+      ringLocalPos: [ringWorldX, ringWorldY, 0],
+      handleThicknessLocal: 0.5 * (th1 + th2),
     };
   } else if (archetype === 'couteau' && components.length > 0) {
     const hero = components[0];
-    const handleIsLeft = hero.guardU <= 0.5;
-    const uLo = handleIsLeft ? hero.guardU * 0.28 : hero.guardU + (1 - hero.guardU) * 0.20;
-    const uHi = handleIsLeft ? hero.guardU * 0.82 : hero.guardU + (1 - hero.guardU) * 0.72;
+    const handleIsLeft =
+      bladeVariant === 'katana'
+        ? hero.leftHalfArea > hero.rightHalfArea && hero.guardU < 0.5
+        : bladeVariant === 'dague'
+        ? hero.narrowTipSide === 'right'
+        : Math.abs(hero.guardU - 0.5) > 0.1
+        ? hero.guardU < 0.5
+        : hero.narrowTipSide === 'right';
+    const uLo =
+      bladeVariant === 'katana'
+        ? handleIsLeft
+          ? 0.06
+          : 0.79
+        : handleIsLeft
+        ? hero.guardU * 0.25
+        : hero.guardU + (1 - hero.guardU) * 0.18;
+    const uHi =
+      bladeVariant === 'katana'
+        ? handleIsLeft
+          ? 0.21
+          : 0.94
+        : handleIsLeft
+        ? hero.guardU * 0.84
+        : hero.guardU + (1 - hero.guardU) * 0.76;
     const halfLen = Math.max(1, 0.5 * hero.localLen);
+    const katanaCoreHalfV = Math.max(10, hero.localHeight * 0.14);
     let sx = 0;
     let sy = 0;
     let cnt = 0;
@@ -1761,7 +1851,12 @@ export function buildSculptedMeshData(
         const dx = x - hero.cx;
         const dy = y - hero.cy;
         const lu = clamp((dx * hero.cosA + dy * hero.sinA + halfLen) / (2 * halfLen), 0, 1);
-        if (lu >= uLo && lu <= uHi) {
+        const lv = -dx * hero.sinA + dy * hero.cosA;
+        if (
+          lu >= uLo &&
+          lu <= uHi &&
+          (bladeVariant !== 'katana' || Math.abs(lv) <= katanaCoreHalfV)
+        ) {
           sx += x;
           sy += y;
           cnt++;
@@ -1771,7 +1866,9 @@ export function buildSculptedMeshData(
     const dirSign = handleIsLeft ? 1 : -1;
     const hx = hero.cosA * dirSign;
     const hy = -hero.sinA * dirSign;
-    const bx = hero.sinA * hero.spineSign;
+    // World representation of pixel perpendicular lv = (-sinA, cosA) with Y flipped is (-sinA, -cosA),
+    // ensuring hx * bx + hy * by === 0 strictly at every tilt angle.
+    const bx = -hero.sinA * hero.spineSign;
     const by = -hero.cosA * hero.spineSign;
     gripMeta = {
       gripLocalPos: cnt > 0 ? [toWorldX(sx / cnt), toWorldY(sy / cnt), 0] : [0, 0, 0],
