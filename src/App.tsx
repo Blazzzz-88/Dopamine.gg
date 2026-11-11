@@ -106,9 +106,9 @@ export function App() {
         setCurrentUsername(data.username || null);
         setPersisted((prev) => ({
           ...prev,
-          balance: Number(data.credits ?? prev.balance),
-          inventory: Array.isArray(data.inventory) ? data.inventory : prev.inventory,
-          inventoryCapacity: Number(data.storage_limit ?? prev.inventoryCapacity),
+          balance: typeof data.credits === 'number' ? data.credits : 3000,
+          inventory: Array.isArray(data.inventory) ? data.inventory : [],
+          inventoryCapacity: typeof data.storage_limit === 'number' ? data.storage_limit : 25,
           history: Array.isArray(data.drop_history) ? data.drop_history : prev.history,
           stats: data.stats && typeof data.stats === 'object' ? { ...prev.stats, ...data.stats } : prev.stats,
         }));

@@ -56,6 +56,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         if (error) throw error;
 
         if (data.user) {
+          // Créer le profil initial avec exactement 3000 crédits et 25 de stockage de base
+          await supabase.from('profiles').upsert({
+            id: data.user.id,
+            username: username.trim(),
+            credits: 3000,
+            storage_limit: 25,
+            inventory: [],
+            drop_history: [],
+            stats: {},
+            updated_at: new Date().toISOString(),
+          });
+
           setSuccessMsg('Compte créé avec succès ! Vos données sont désormais sauvegardées dans le cloud.');
           setTimeout(() => {
             onAuthSuccess();
