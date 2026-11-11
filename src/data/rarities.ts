@@ -1,0 +1,81 @@
+import { RarityId, RarityMeta, WeaponClass } from '../types/casino';
+
+export const RARITY_ORDER: RarityId[] = [
+  'commune',
+  'rare',
+  'mythique',
+  'legendaire',
+  'secret',
+];
+
+export const RARITIES: Record<RarityId, RarityMeta> = {
+  commune: {
+    id: 'commune',
+    label: 'Commune',
+    difficultyLabel: 'Facile à obtenir',
+    probability: 67.225,
+    color: '#94A3B8',
+    glowColor: 'rgba(148, 163, 184, 0.25)',
+    borderColor: 'rgba(148, 163, 184, 0.35)',
+    bgTint: 'rgba(148, 163, 184, 0.08)',
+    badgeBg: 'rgba(148, 163, 184, 0.14)',
+    order: 1,
+  },
+  rare: {
+    id: 'rare',
+    label: 'Rare',
+    difficultyLabel: 'Un peu plus difficile',
+    probability: 23.0,
+    color: '#38BDF8',
+    glowColor: 'rgba(56, 189, 248, 0.35)',
+    borderColor: 'rgba(56, 189, 248, 0.45)',
+    bgTint: 'rgba(14, 165, 233, 0.11)',
+    badgeBg: 'rgba(14, 165, 233, 0.18)',
+    order: 2,
+  },
+  mythique: {
+    id: 'mythique',
+    label: 'Mythique',
+    difficultyLabel: 'Encore plus difficile',
+    probability: 8.75,
+    color: '#A78BFA',
+    glowColor: 'rgba(167, 139, 250, 0.42)',
+    borderColor: 'rgba(167, 139, 250, 0.55)',
+    bgTint: 'rgba(139, 92, 246, 0.14)',
+    badgeBg: 'rgba(139, 92, 246, 0.22)',
+    order: 3,
+  },
+  legendaire: {
+    id: 'legendaire',
+    label: 'Légendaire',
+    difficultyLabel: 'Très difficile',
+    probability: 1.0,
+    color: '#FBBF24',
+    glowColor: 'rgba(251, 191, 36, 0.45)',
+    borderColor: 'rgba(251, 191, 36, 0.6)',
+    bgTint: 'rgba(245, 158, 11, 0.14)',
+    badgeBg: 'rgba(245, 158, 11, 0.22)',
+    order: 4,
+  },
+  secret: {
+    id: 'secret',
+    label: 'Secret',
+    difficultyLabel: 'Quasiment impossible',
+    probability: 0.025,
+    color: '#F472B6',
+    glowColor: 'rgba(244, 114, 182, 0.55)',
+    borderColor: 'rgba(244, 114, 182, 0.72)',
+    bgTint: 'rgba(236, 72, 153, 0.16)',
+    badgeBg: 'rgba(236, 72, 153, 0.24)',
+    order: 5,
+  },
+};
+
+export const WEAPON_CLASS_LABELS: Record<WeaponClass, string> = {
+  fusil: 'Fusil d’assaut',
+  pm: 'Pistolet-mitrailleur',
+  sniper: 'Fusil de précision',
+  pistolet: 'Pistolet',
+  pompe: 'Fusil à pompe',
+  lame: 'Lame / Couteau',
+};

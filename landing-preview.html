@@ -1,0 +1,1161 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Dopamine.gg — Accueil</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700;900&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet"/>
+<style>
+/* =========================================================
+   RESET & TOKENS
+   ========================================================= */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#050811;
+  --panel:#080e1c;
+  --card:#0c1427;
+  --elevated:#111c36;
+  --a50:#f0f9ff;--a100:#e0f2fe;--a200:#bae6fd;
+  --a300:#7dd3fc;--a400:#38bdf8;--a500:#0ea5e9;
+  --a900:#0c4a6e;--a950:#041d2e;
+  --b300:#a5b4fc;--b400:#818cf8;
+  --grid:rgba(56,189,248,.055);
+  --border:rgba(56,189,248,.15);
+  --glow:rgba(56,189,248,.28);
+  --aura:rgba(56,189,248,.14);
+  --rc:#94A3B8;--rr:#38BDF8;--rm:#A78BFA;--rl:#FBBF24;--rs:#F472B6;
+}
+html{scroll-behavior:smooth}
+body{
+  font-family:'Plus Jakarta Sans',system-ui,sans-serif;
+  background:var(--bg);color:var(--a50);
+  overflow-x:hidden;
+}
+h1,h2,h3,.font-display{font-family:'Space Grotesk',system-ui,sans-serif}
+.mono{font-family:'JetBrains Mono',monospace;font-variant-numeric:tabular-nums}
+
+/* =========================================================
+   CANVAS PARTICLES
+   ========================================================= */
+#particles-canvas{
+  position:fixed;inset:0;pointer-events:none;z-index:0;
+  opacity:.45;
+}
+
+/* =========================================================
+   ARCHITECTURAL GRID + AURA
+   ========================================================= */
+.bg-grid{
+  position:fixed;inset:0;pointer-events:none;z-index:0;
+  background-image:
+    linear-gradient(to right,var(--grid) 1px,transparent 1px),
+    linear-gradient(to bottom,var(--grid) 1px,transparent 1px);
+  background-size:48px 48px;
+  opacity:.8;
+}
+.bg-aura{
+  position:fixed;inset-inline:0;top:0;height:520px;
+  pointer-events:none;z-index:0;
+  background:radial-gradient(ellipse 80% 60% at 50% 0%,var(--aura),transparent 70%);
+}
+
+/* =========================================================
+   NAVBAR
+   ========================================================= */
+nav{
+  position:fixed;top:0;inset-inline:0;z-index:900;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 2rem;height:60px;
+  background:rgba(5,8,17,.75);
+  backdrop-filter:blur(16px);
+  border-bottom:1px solid var(--border);
+}
+.nav-logo{
+  font-family:'Space Grotesk',sans-serif;font-weight:900;font-size:1.3rem;
+  background:linear-gradient(90deg,var(--a300),var(--b300));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  background-clip:text;
+  display:flex;align-items:center;gap:8px;
+}
+.nav-logo-dot{
+  width:8px;height:8px;border-radius:50%;
+  background:var(--a400);box-shadow:0 0 10px var(--a400);
+  animation:dot-blink 2s ease-in-out infinite;
+}
+@keyframes dot-blink{0%,100%{opacity:1}50%{opacity:.3}}
+.nav-links{display:flex;gap:1.5rem;list-style:none}
+.nav-links a{
+  font-size:.82rem;font-weight:600;color:rgba(224,242,254,.55);
+  text-decoration:none;transition:color .2s;letter-spacing:.02em;
+}
+.nav-links a:hover{color:var(--a300)}
+.nav-cta{
+  display:flex;align-items:center;gap:10px;
+}
+.balance-pill{
+  display:flex;align-items:center;gap:6px;
+  padding:5px 14px;border-radius:999px;
+  border:1px solid rgba(56,189,248,.2);
+  background:rgba(14,165,233,.08);
+  font-size:.75rem;font-weight:700;color:var(--a300);
+}
+.btn-play{
+  padding:7px 18px;border-radius:10px;
+  background:linear-gradient(135deg,var(--a400),var(--b300));
+  color:var(--a950);font-weight:800;font-size:.8rem;
+  border:none;cursor:pointer;
+  box-shadow:0 0 20px var(--glow);
+  transition:transform .15s,filter .15s;
+}
+.btn-play:hover{transform:scale(1.05);filter:brightness(1.08)}
+
+/* =========================================================
+   LIVE TICKER
+   ========================================================= */
+.ticker-bar{
+  position:fixed;top:60px;inset-inline:0;z-index:800;
+  height:34px;overflow:hidden;
+  background:rgba(8,14,28,.9);
+  border-bottom:1px solid rgba(56,189,248,.1);
+  display:flex;align-items:center;
+}
+.ticker-track{
+  display:flex;white-space:nowrap;
+  animation:tick 36s linear infinite;
+}
+@keyframes tick{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+.tick-item{
+  display:inline-flex;align-items:center;gap:7px;
+  padding:0 22px;font-size:.7rem;font-weight:700;
+  border-right:1px solid rgba(56,189,248,.07);
+}
+.tick-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+
+/* =========================================================
+   HERO SECTION
+   ========================================================= */
+.hero{
+  position:relative;z-index:10;
+  min-height:100vh;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  padding:120px 2rem 80px;
+  text-align:center;
+  overflow:hidden;
+}
+
+/* giant glow orbs */
+.hero-orb{
+  position:absolute;border-radius:50%;filter:blur(100px);pointer-events:none;
+}
+.hero-orb-1{
+  width:600px;height:600px;right:-150px;top:-100px;
+  background:rgba(56,189,248,.12);
+  animation:orb1 10s ease-in-out infinite;
+}
+.hero-orb-2{
+  width:450px;height:450px;left:-100px;bottom:-80px;
+  background:rgba(129,140,248,.1);
+  animation:orb2 13s ease-in-out infinite 2s;
+}
+.hero-orb-3{
+  width:300px;height:300px;left:50%;top:30%;transform:translate(-50%,-50%);
+  background:rgba(244,114,182,.07);
+  animation:orb2 8s ease-in-out infinite 1s;
+}
+@keyframes orb1{0%,100%{transform:scale(1) translate(0,0);opacity:.7}50%{transform:scale(1.15) translate(-20px,15px);opacity:1}}
+@keyframes orb2{0%,100%{transform:scale(1);opacity:.6}50%{transform:scale(1.2);opacity:1}}
+
+/* hero eyebrow */
+.hero-eyebrow{
+  display:inline-flex;align-items:center;gap:8px;
+  padding:5px 16px;border-radius:999px;
+  border:1px solid rgba(56,189,248,.3);
+  background:rgba(14,165,233,.1);
+  font-size:.7rem;font-weight:800;letter-spacing:.1em;
+  color:var(--a300);text-transform:uppercase;
+  margin-bottom:1.5rem;
+  opacity:0;animation:fadeUp .6s .2s cubic-bezier(.22,1,.36,1) forwards;
+}
+.live-dot{
+  width:7px;height:7px;border-radius:50%;background:#22c55e;
+  box-shadow:0 0 10px #22c55e;
+  animation:live-pulse 1.5s ease-in-out infinite;
+}
+@keyframes live-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.7)}}
+
+/* hero title */
+.hero-title{
+  font-size:clamp(3rem,8vw,6.5rem);
+  font-weight:900;line-height:1.0;
+  letter-spacing:-.03em;
+  margin-bottom:1.5rem;
+  opacity:0;animation:fadeUp .7s .35s cubic-bezier(.22,1,.36,1) forwards;
+}
+.hero-title .word1{display:block;color:var(--a50)}
+.hero-title .word2{
+  display:block;
+  background:linear-gradient(90deg,var(--a300) 0%,var(--b300) 40%,var(--rs) 80%,var(--a400) 100%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  background-clip:text;
+  background-size:200% 100%;
+  animation:grad-move 5s linear infinite 1s;
+}
+@keyframes grad-move{0%{background-position:0% 50%}100%{background-position:200% 50%}}
+
+/* hero subtitle */
+.hero-sub{
+  max-width:560px;font-size:1.05rem;
+  color:rgba(186,230,253,.6);line-height:1.7;
+  margin-bottom:2.5rem;
+  opacity:0;animation:fadeUp .6s .5s cubic-bezier(.22,1,.36,1) forwards;
+}
+.hero-sub strong{color:var(--a200)}
+
+/* hero buttons */
+.hero-btns{
+  display:flex;gap:12px;flex-wrap:wrap;justify-content:center;
+  margin-bottom:3.5rem;
+  opacity:0;animation:fadeUp .6s .65s cubic-bezier(.22,1,.36,1) forwards;
+}
+.btn-primary{
+  position:relative;overflow:hidden;
+  padding:14px 32px;border-radius:14px;
+  background:linear-gradient(135deg,var(--a400),var(--b300));
+  color:var(--a950);font-weight:800;font-size:1rem;
+  border:none;cursor:pointer;
+  box-shadow:0 0 50px var(--glow);
+  transition:transform .2s,filter .2s;
+  display:flex;align-items:center;gap:8px;
+}
+.btn-primary::after{
+  content:'';position:absolute;inset:0;width:40%;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.25),transparent);
+  transform:translateX(-140%) skewX(-18deg);pointer-events:none;
+  transition:transform .6s ease;
+}
+.btn-primary:hover::after{transform:translateX(240%) skewX(-18deg)}
+.btn-primary:hover{transform:scale(1.04);filter:brightness(1.08)}
+.btn-secondary{
+  padding:14px 28px;border-radius:14px;
+  border:1px solid rgba(56,189,248,.28);
+  background:rgba(4,29,46,.6);
+  color:var(--a200);font-weight:700;font-size:1rem;
+  cursor:pointer;transition:border-color .2s,background .2s;
+  display:flex;align-items:center;gap:8px;
+}
+.btn-secondary:hover{
+  border-color:rgba(56,189,248,.55);
+  background:rgba(14,165,233,.08);
+}
+
+/* hero stats strip */
+.hero-stats{
+  display:flex;gap:2px;
+  opacity:0;animation:fadeUp .6s .8s cubic-bezier(.22,1,.36,1) forwards;
+}
+.hstat{
+  padding:10px 24px;text-align:center;
+  border:1px solid rgba(56,189,248,.12);
+  background:rgba(8,14,28,.7);
+  backdrop-filter:blur(10px);
+}
+.hstat:first-child{border-radius:12px 0 0 12px}
+.hstat:last-child{border-radius:0 12px 12px 0}
+.hstat-num{
+  font-family:'Space Grotesk',sans-serif;
+  font-size:1.6rem;font-weight:900;
+  background:linear-gradient(135deg,var(--a300),var(--b300));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  background-clip:text;
+}
+.hstat-lbl{font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:rgba(186,230,253,.4);margin-top:2px}
+
+/* hero rarity ladder */
+.hero-rarity{
+  margin-top:2.5rem;
+  display:flex;gap:8px;flex-wrap:wrap;justify-content:center;
+  opacity:0;animation:fadeUp .6s 1s cubic-bezier(.22,1,.36,1) forwards;
+}
+.rarity-pill{
+  display:flex;align-items:center;gap:7px;
+  padding:6px 14px;border-radius:10px;border:1px solid;
+  font-size:.72rem;font-weight:700;
+}
+.rarity-pill .rdot{width:8px;height:8px;border-radius:50%}
+.rarity-pill .rprob{font-family:'JetBrains Mono',monospace;font-size:.65rem;opacity:.65;margin-left:4px}
+
+/* scroll indicator */
+.scroll-hint{
+  position:absolute;bottom:2rem;left:50%;transform:translateX(-50%);
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+  color:rgba(186,230,253,.3);font-size:.7rem;font-weight:600;letter-spacing:.08em;
+  animation:fadeUp .6s 1.4s both;
+}
+.scroll-arrow{
+  width:24px;height:24px;border-right:2px solid rgba(56,189,248,.4);border-bottom:2px solid rgba(56,189,248,.4);
+  transform:rotate(45deg);
+  animation:bounce-down 1.6s ease-in-out infinite;
+}
+@keyframes bounce-down{0%,100%{transform:rotate(45deg) translateY(0)}50%{transform:rotate(45deg) translateY(5px)}}
+
+/* =========================================================
+   SECTION — CAISSES
+   ========================================================= */
+.section-caisses{
+  position:relative;z-index:10;
+  padding:5rem 2rem;
+}
+.section-label{
+  display:flex;align-items:center;gap:10px;
+  font-size:.7rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--a400);margin-bottom:.8rem;
+}
+.section-label::before{content:'';flex:1;max-width:40px;height:1px;background:var(--a400);opacity:.5}
+.section-title{
+  font-size:clamp(1.8rem,4vw,3rem);font-weight:900;
+  margin-bottom:.6rem;
+}
+.section-sub{font-size:.95rem;color:rgba(186,230,253,.5);max-width:480px;line-height:1.6}
+
+.caisses-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(260px,1fr));
+  gap:1.2rem;
+  margin-top:2.5rem;
+  max-width:1200px;margin-inline:auto;
+}
+.caisse-card{
+  border-radius:1.2rem;border:1px solid;
+  overflow:hidden;cursor:pointer;
+  transition:transform .3s cubic-bezier(.22,1,.36,1),box-shadow .3s;
+  position:relative;
+}
+.caisse-card:hover{transform:translateY(-8px) scale(1.02)}
+.caisse-img{
+  width:100%;height:160px;object-fit:cover;display:block;
+}
+.caisse-img-fallback{
+  width:100%;height:160px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:3.5rem;position:relative;
+}
+.caisse-img-fallback::after{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(to bottom,transparent 40%,var(--card) 100%);
+}
+.caisse-body{padding:1rem 1.2rem 1.2rem}
+.caisse-cat{
+  font-size:.62rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;
+  margin-bottom:4px;
+}
+.caisse-name{
+  font-family:'Space Grotesk',sans-serif;
+  font-size:1.1rem;font-weight:800;line-height:1.2;margin-bottom:4px;
+}
+.caisse-sub{font-size:.72rem;color:rgba(186,230,253,.45);line-height:1.4;margin-bottom:.8rem}
+.caisse-footer{display:flex;align-items:center;justify-content:space-between}
+.caisse-price{
+  font-family:'JetBrains Mono',monospace;
+  font-size:.85rem;font-weight:700;
+}
+.caisse-btn{
+  padding:5px 14px;border-radius:8px;font-size:.72rem;font-weight:800;
+  border:none;cursor:pointer;
+  display:flex;align-items:center;gap:5px;
+}
+/* shine on hover */
+.caisse-card::before{
+  content:'';position:absolute;inset:0;z-index:2;pointer-events:none;
+  background:linear-gradient(130deg,rgba(255,255,255,0) 40%,rgba(255,255,255,.04) 50%,rgba(255,255,255,0) 60%);
+  background-size:200% 100%;
+  transition:background-position .5s;
+}
+.caisse-card:hover::before{background-position:200% 0}
+
+/* =========================================================
+   SECTION — SKINS VEDETTES
+   ========================================================= */
+.section-skins{
+  position:relative;z-index:10;
+  padding:5rem 2rem;
+  background:linear-gradient(to bottom,transparent,rgba(8,14,28,.5),transparent);
+}
+.skins-scroll{
+  display:flex;gap:1rem;
+  overflow-x:auto;padding-bottom:1rem;
+  scrollbar-width:thin;scrollbar-color:rgba(56,189,248,.2) transparent;
+  margin-top:2.5rem;
+  scroll-snap-type:x mandatory;
+  max-width:1200px;margin-inline:auto;
+}
+.skin-card{
+  flex:0 0 200px;
+  border-radius:1.2rem;border:1px solid;
+  padding:1.2rem;position:relative;overflow:hidden;
+  scroll-snap-align:start;
+  transition:transform .3s cubic-bezier(.22,1,.36,1),box-shadow .3s;
+  cursor:pointer;
+}
+.skin-card:hover{transform:translateY(-6px)}
+.skin-swatches{display:flex;gap:5px;margin-bottom:.8rem}
+.swatch{
+  width:16px;height:16px;border-radius:50%;
+  border:1px solid rgba(255,255,255,.12);
+}
+.skin-weapon{
+  font-size:.62rem;font-weight:800;letter-spacing:.08em;
+  text-transform:uppercase;opacity:.45;margin-bottom:3px;
+}
+.skin-name{
+  font-family:'Space Grotesk',sans-serif;
+  font-size:.95rem;font-weight:800;line-height:1.2;margin-bottom:.5rem;
+}
+.skin-badge{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:3px 10px;border-radius:999px;border:1px solid;
+  font-size:.6rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;
+}
+.skin-val{
+  font-family:'JetBrains Mono',monospace;
+  font-size:.72rem;margin-top:.5rem;opacity:.7;
+}
+/* secret prism */
+.skin-secret{
+  animation:prism-border 3s ease infinite;
+}
+@keyframes prism-border{
+  0%  {border-color:rgba(244,114,182,.7);box-shadow:0 0 30px rgba(244,114,182,.2)}
+  25% {border-color:rgba(56,189,248,.7); box-shadow:0 0 30px rgba(56,189,248,.2)}
+  50% {border-color:rgba(251,191,36,.7); box-shadow:0 0 30px rgba(251,191,36,.2)}
+  75% {border-color:rgba(167,139,250,.7);box-shadow:0 0 30px rgba(167,139,250,.2)}
+  100%{border-color:rgba(244,114,182,.7);box-shadow:0 0 30px rgba(244,114,182,.2)}
+}
+
+/* =========================================================
+   SECTION — ROULETTE INTERACTIVE
+   ========================================================= */
+.section-roulette{
+  position:relative;z-index:10;
+  padding:5rem 2rem;
+  overflow:hidden;
+}
+.roulette-wrap{
+  max-width:860px;margin:0 auto;
+  display:flex;flex-direction:column;gap:1.5rem;align-items:center;
+}
+.roulette-box{
+  width:100%;position:relative;
+}
+.roulette-ptr{
+  position:absolute;top:-12px;left:50%;transform:translateX(-50%);
+  width:3px;height:calc(100% + 24px);
+  background:var(--a400);z-index:20;
+  box-shadow:0 0 14px var(--a400),0 0 40px var(--glow);
+}
+.roulette-ptr::before{content:'▼';position:absolute;top:-14px;left:50%;transform:translateX(-50%);color:var(--a400);font-size:14px}
+.roulette-ptr::after{content:'▲';position:absolute;bottom:-14px;left:50%;transform:translateX(-50%);color:var(--a400);font-size:14px}
+.roulette-window{
+  overflow:hidden;border-radius:1.4rem;
+  border:1px solid var(--border);
+  background:var(--panel);
+  box-shadow:0 0 80px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.04);
+  position:relative;
+}
+.roulette-window::before,.roulette-window::after{
+  content:'';position:absolute;top:0;bottom:0;width:140px;z-index:10;pointer-events:none;
+}
+.roulette-window::before{left:0;background:linear-gradient(to right,var(--panel),transparent)}
+.roulette-window::after{right:0;background:linear-gradient(to left,var(--panel),transparent)}
+.roulette-track{
+  display:flex;padding:14px 0;
+  transition:transform 4.8s cubic-bezier(.17,.84,.44,1);
+  will-change:transform;
+}
+.reel-cell{
+  flex:0 0 134px;height:104px;
+  margin:0 5px;border-radius:12px;border:1px solid;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:6px;padding:8px;text-align:center;
+  transition:box-shadow .3s;
+}
+.reel-cell.winner{
+  animation:winner-glow 1s ease-in-out infinite;
+}
+@keyframes winner-glow{
+  0%,100%{box-shadow:0 0 10px currentColor}
+  50%{box-shadow:0 0 40px currentColor,0 0 80px currentColor}
+}
+.rc-icon{font-size:1.4rem;line-height:1}
+.rc-name{
+  font-family:'Space Grotesk',sans-serif;
+  font-size:.62rem;font-weight:700;line-height:1.3;
+}
+.rc-rarity{font-size:.55rem;font-weight:800;letter-spacing:.05em;opacity:.7}
+
+.open-btn-wrap{display:flex;flex-direction:column;align-items:center;gap:1rem}
+.open-btn{
+  position:relative;overflow:hidden;
+  padding:14px 40px;border-radius:14px;
+  background:linear-gradient(135deg,var(--a400),var(--b400));
+  color:var(--a950);font-weight:900;font-size:1.05rem;
+  border:none;cursor:pointer;
+  box-shadow:0 0 60px var(--glow);
+  transition:transform .2s,filter .2s;
+  display:flex;align-items:center;gap:10px;
+  letter-spacing:.01em;
+}
+.open-btn:disabled{opacity:.5;cursor:not-allowed;transform:none!important}
+.open-btn:hover:not(:disabled){transform:scale(1.05);filter:brightness(1.08)}
+.open-btn::after{
+  content:'';position:absolute;inset:0;width:40%;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.3),transparent);
+  transform:translateX(-140%) skewX(-18deg);pointer-events:none;
+}
+.open-btn:hover:not(:disabled)::after{
+  animation:sheen .7s ease-out forwards;
+}
+@keyframes sheen{from{transform:translateX(-140%) skewX(-18deg)}to{transform:translateX(260%) skewX(-18deg)}}
+
+.win-reveal{
+  display:none;
+  align-items:center;gap:1rem;
+  padding:1rem 1.8rem;
+  border-radius:1.2rem;border:2px solid;
+  background:rgba(5,8,17,.95);
+  animation:pop-in .5s cubic-bezier(.22,1,.36,1);
+}
+@keyframes pop-in{from{opacity:0;transform:scale(.88) translateY(10px)}to{opacity:1;transform:scale(1) translateY(0)}}
+.win-emoji{font-size:2.6rem}
+.win-info{}
+.win-name{font-family:'Space Grotesk',sans-serif;font-size:1.15rem;font-weight:900}
+.win-weapon{font-size:.75rem;opacity:.55;margin-top:2px}
+.win-val{font-family:'JetBrains Mono',monospace;font-size:.85rem;margin-top:4px}
+.win-actions{display:flex;gap:8px;margin-top:.6rem}
+.win-keep{padding:5px 16px;border-radius:8px;background:rgba(14,165,233,.2);border:1px solid rgba(56,189,248,.35);color:var(--a300);font-size:.72rem;font-weight:700;cursor:pointer}
+.win-sell{padding:5px 16px;border-radius:8px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);color:rgba(186,230,253,.5);font-size:.72rem;font-weight:700;cursor:pointer}
+
+/* =========================================================
+   SECTION — FEATURES
+   ========================================================= */
+.section-features{
+  position:relative;z-index:10;
+  padding:5rem 2rem;
+}
+.features-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(240px,1fr));
+  gap:1rem;max-width:1100px;margin:2.5rem auto 0;
+}
+.feat-card{
+  border-radius:1.2rem;border:1px solid var(--border);
+  background:linear-gradient(160deg,rgba(12,20,39,.9),rgba(8,14,28,.95));
+  padding:1.5rem;position:relative;overflow:hidden;
+  transition:transform .3s,border-color .3s,box-shadow .3s;
+}
+.feat-card:hover{
+  transform:translateY(-4px);
+  border-color:rgba(56,189,248,.35);
+  box-shadow:0 20px 50px -20px var(--glow);
+}
+.feat-card::after{
+  content:'';position:absolute;bottom:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,transparent,var(--a400),transparent);
+  opacity:.5;
+}
+.feat-icon{
+  font-size:1.8rem;margin-bottom:.8rem;display:block;
+}
+.feat-title{
+  font-family:'Space Grotesk',sans-serif;
+  font-size:.95rem;font-weight:800;margin-bottom:.4rem;
+}
+.feat-desc{font-size:.78rem;color:rgba(186,230,253,.45);line-height:1.6}
+
+/* =========================================================
+   FOOTER CTA
+   ========================================================= */
+.section-cta{
+  position:relative;z-index:10;
+  padding:5rem 2rem 4rem;
+  display:flex;flex-direction:column;align-items:center;
+  text-align:center;gap:1.5rem;
+  overflow:hidden;
+}
+.cta-orb{
+  position:absolute;width:600px;height:600px;border-radius:50%;
+  left:50%;top:50%;transform:translate(-50%,-50%);
+  background:radial-gradient(circle,rgba(56,189,248,.1),transparent 70%);
+  pointer-events:none;
+  animation:orb2 8s ease-in-out infinite;
+}
+.cta-title{font-size:clamp(2.2rem,5vw,4rem);font-weight:900;line-height:1.1;letter-spacing:-.02em}
+.cta-title .hi{
+  background:linear-gradient(90deg,var(--a300),var(--b300),var(--rs));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  background-size:200% 100%;animation:grad-move 4s linear infinite;
+}
+.cta-desc{font-size:.95rem;color:rgba(186,230,253,.5);max-width:460px;line-height:1.65}
+.cta-btns{display:flex;gap:12px;flex-wrap:wrap;justify-content:center}
+
+/* =========================================================
+   FOOTER
+   ========================================================= */
+footer{
+  position:relative;z-index:10;
+  border-top:1px solid rgba(56,189,248,.1);
+  background:rgba(5,8,17,.95);
+  padding:1.5rem 2rem;
+  display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.8rem;
+}
+.footer-brand{
+  font-family:'Space Grotesk',sans-serif;font-size:.82rem;font-weight:700;color:var(--a300);
+}
+.footer-note{font-size:.72rem;color:rgba(186,230,253,.3)}
+
+/* =========================================================
+   SECTION WRAPPER (reveal on scroll)
+   ========================================================= */
+.reveal{
+  opacity:0;transform:translateY(28px);
+  transition:opacity .7s cubic-bezier(.22,1,.36,1),transform .7s cubic-bezier(.22,1,.36,1);
+}
+.reveal.visible{opacity:1;transform:translateY(0)}
+
+/* =========================================================
+   KEYFRAME HELPERS
+   ========================================================= */
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+
+/* =========================================================
+   RESPONSIVE
+   ========================================================= */
+@media(max-width:640px){
+  .nav-links{display:none}
+  .hero-stats{flex-wrap:wrap;justify-content:center}
+  .hstat{flex:0 0 calc(50% - 1px)}
+  .skins-scroll{padding-inline:1rem}
+}
+</style>
+</head>
+<body>
+
+<!-- Particle canvas -->
+<canvas id="particles-canvas"></canvas>
+<div class="bg-grid"></div>
+<div class="bg-aura"></div>
+
+<!-- =====================================================
+     NAVBAR
+     ===================================================== -->
+<nav>
+  <div class="nav-logo">
+    <span class="nav-logo-dot"></span>
+    Dopamine<span style="color:rgba(186,230,253,.4)">.gg</span>
+  </div>
+  <ul class="nav-links">
+    <li><a href="#caisses">Boutique</a></li>
+    <li><a href="#skins">Skins</a></li>
+    <li><a href="#roulette">Ouvrir</a></li>
+    <li><a href="#features">Guide</a></li>
+  </ul>
+  <div class="nav-cta">
+    <div class="balance-pill">💰 3 000 CR</div>
+    <button class="btn-play" onclick="document.getElementById('roulette').scrollIntoView({behavior:'smooth'})">▶ Jouer</button>
+  </div>
+</nav>
+
+<!-- =====================================================
+     TICKER
+     ===================================================== -->
+<div class="ticker-bar">
+  <div class="ticker-track" id="ticker-track"></div>
+</div>
+
+<!-- =====================================================
+     HERO
+     ===================================================== -->
+<section class="hero">
+  <div class="hero-orb hero-orb-1"></div>
+  <div class="hero-orb hero-orb-2"></div>
+  <div class="hero-orb hero-orb-3"></div>
+
+  <div class="hero-eyebrow">
+    <span class="live-dot"></span>
+    Simulation 100% fictive · Aucun argent réel
+  </div>
+
+  <h1 class="hero-title">
+    <span class="word1">L'arsenal virtuel</span>
+    <span class="word2">nouvelle génération.</span>
+  </h1>
+
+  <p class="hero-sub">
+    Explorez <strong>3 catégories</strong> et <strong>6 caisses exclusives</strong> contenant
+    <strong>132 skins uniques</strong>. Tentez de décrocher les pièces
+    <strong>Légendaires</strong> ou l'introuvable palier <strong>Secret (0,025%)</strong>.
+  </p>
+
+  <div class="hero-btns">
+    <button class="btn-primary" onclick="document.getElementById('roulette').scrollIntoView({behavior:'smooth'})">
+      ⚡ Ouvrir une caisse
+    </button>
+    <button class="btn-secondary" onclick="document.getElementById('caisses').scrollIntoView({behavior:'smooth'})">
+      📦 Voir les caisses
+    </button>
+  </div>
+
+  <div class="hero-stats">
+    <div class="hstat"><div class="hstat-num">6</div><div class="hstat-lbl">Caisses</div></div>
+    <div class="hstat"><div class="hstat-num">132</div><div class="hstat-lbl">Skins uniques</div></div>
+    <div class="hstat"><div class="hstat-num">5</div><div class="hstat-lbl">Paliers de rareté</div></div>
+    <div class="hstat"><div class="hstat-num mono">0.025<span style="font-size:.9rem">%</span></div><div class="hstat-lbl">Chance Secret</div></div>
+  </div>
+
+  <div class="hero-rarity">
+    <div class="rarity-pill" style="border-color:rgba(148,163,184,.35);background:rgba(148,163,184,.07);color:#94A3B8;">
+      <span class="rdot" style="background:#94A3B8;box-shadow:0 0 8px #94A3B8;"></span>Commune<span class="rprob">67.2%</span>
+    </div>
+    <div class="rarity-pill" style="border-color:rgba(56,189,248,.4);background:rgba(56,189,248,.09);color:#38BDF8;">
+      <span class="rdot" style="background:#38BDF8;box-shadow:0 0 8px #38BDF8;"></span>Rare<span class="rprob">23.0%</span>
+    </div>
+    <div class="rarity-pill" style="border-color:rgba(167,139,250,.5);background:rgba(139,92,246,.1);color:#A78BFA;">
+      <span class="rdot" style="background:#A78BFA;box-shadow:0 0 8px #A78BFA;"></span>Mythique<span class="rprob">8.75%</span>
+    </div>
+    <div class="rarity-pill" style="border-color:rgba(251,191,36,.55);background:rgba(245,158,11,.1);color:#FBBF24;">
+      <span class="rdot" style="background:#FBBF24;box-shadow:0 0 8px #FBBF24;"></span>Légendaire<span class="rprob">1.0%</span>
+    </div>
+    <div class="rarity-pill" style="border-color:rgba(244,114,182,.65);background:rgba(236,72,153,.12);color:#F472B6;">
+      <span class="rdot" style="background:#F472B6;box-shadow:0 0 8px #F472B6;"></span>Secret<span class="rprob">0.025%</span>
+    </div>
+  </div>
+
+  <div class="scroll-hint">
+    <span>DÉCOUVRIR</span>
+    <div class="scroll-arrow"></div>
+  </div>
+</section>
+
+<!-- =====================================================
+     SECTION CAISSES
+     ===================================================== -->
+<section class="section-caisses reveal" id="caisses">
+  <div style="max-width:1200px;margin:0 auto;">
+    <div class="section-label">📦 Boutique</div>
+    <h2 class="section-title">6 caisses, 3 univers distincts</h2>
+    <p class="section-sub">Des Opérations Tactiques au Prestige Ultime, chaque caisse cache ses propres trésors.</p>
+
+    <div class="caisses-grid" id="caisses-grid">
+      <!-- JS populated -->
+    </div>
+  </div>
+</section>
+
+<!-- =====================================================
+     SECTION SKINS VEDETTES
+     ===================================================== -->
+<section class="section-skins reveal" id="skins">
+  <div style="max-width:1200px;margin:0 auto;">
+    <div class="section-label">✨ Collection</div>
+    <h2 class="section-title">Skins les plus convoités</h2>
+    <p class="section-sub">Les pièces rares et secrètes qui font la légende du casino.</p>
+
+    <div class="skins-scroll" id="skins-scroll">
+      <!-- JS populated -->
+    </div>
+  </div>
+</section>
+
+<!-- =====================================================
+     SECTION ROULETTE INTERACTIVE
+     ===================================================== -->
+<section class="section-roulette reveal" id="roulette">
+  <div class="roulette-wrap">
+    <div style="text-align:center;">
+      <div class="section-label" style="justify-content:center;">🎰 Démo interactive</div>
+      <h2 class="section-title">Ouvrez une caisse maintenant</h2>
+      <p class="section-sub" style="margin-inline:auto;text-align:center;">
+        La roulette s'emballe — testez votre chance avec la caisse <strong style="color:var(--a300)">Ombre Boréale</strong>.
+      </p>
+    </div>
+
+    <div class="roulette-box">
+      <div class="roulette-ptr"></div>
+      <div class="roulette-window" style="height:132px;">
+        <div class="roulette-track" id="roulette-track"></div>
+      </div>
+    </div>
+
+    <div class="open-btn-wrap">
+      <button class="open-btn" id="open-btn" onclick="triggerSpin()">
+        ⚡ Ouvrir « Ombre Boréale » · 120 CR
+      </button>
+      <div class="win-reveal" id="win-reveal">
+        <div class="win-emoji" id="win-emoji">⭐</div>
+        <div class="win-info">
+          <div class="win-name" id="win-name">—</div>
+          <div class="win-weapon" id="win-weapon">—</div>
+          <div class="win-val" id="win-val">—</div>
+          <div class="win-actions">
+            <button class="win-keep" onclick="closeWin()">🎒 Garder</button>
+            <button class="win-sell" onclick="closeWin()">💰 Vendre</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- =====================================================
+     SECTION FEATURES
+     ===================================================== -->
+<section class="section-features reveal" id="features">
+  <div style="max-width:1100px;margin:0 auto;">
+    <div class="section-label">⚙️ Fonctionnalités</div>
+    <h2 class="section-title">Tout ce que vous pouvez faire</h2>
+    <p class="section-sub">Un casino fictif complet avec toutes les mécaniques d'un vrai jeu.</p>
+
+    <div class="features-grid" id="features-grid">
+      <!-- JS populated -->
+    </div>
+  </div>
+</section>
+
+<!-- =====================================================
+     CTA FINAL
+     ===================================================== -->
+<section class="section-cta reveal" id="cta">
+  <div class="cta-orb"></div>
+
+  <div class="hero-eyebrow" style="animation:none;opacity:1;">🏆 Prestige ultime</div>
+
+  <h2 class="cta-title">
+    Votre prochaine drop<br>
+    pourrait être <span class="hi">légendaire.</span>
+  </h2>
+  <p class="cta-desc">
+    Commencez avec 3 000 crédits fictifs rechargeables à volonté.
+    Aucun paiement, aucun risque, 100% de frisson.
+  </p>
+  <div class="cta-btns">
+    <button class="btn-primary" style="font-size:1.05rem;padding:16px 36px;">
+      🚀 Commencer gratuitement
+    </button>
+    <button class="btn-secondary" style="font-size:1rem;">
+      📖 Voir le guide
+    </button>
+  </div>
+
+  <!-- mini rarity ladder -->
+  <div class="hero-rarity" style="opacity:1;animation:none;margin-top:.5rem;">
+    <div class="rarity-pill" style="border-color:rgba(148,163,184,.35);background:rgba(148,163,184,.07);color:#94A3B8;">
+      <span class="rdot" style="background:#94A3B8"></span>Commune
+    </div>
+    <div class="rarity-pill" style="border-color:rgba(56,189,248,.4);background:rgba(56,189,248,.09);color:#38BDF8;">
+      <span class="rdot" style="background:#38BDF8;box-shadow:0 0 8px #38BDF8;"></span>Rare
+    </div>
+    <div class="rarity-pill" style="border-color:rgba(167,139,250,.5);background:rgba(139,92,246,.1);color:#A78BFA;">
+      <span class="rdot" style="background:#A78BFA;box-shadow:0 0 8px #A78BFA;"></span>Mythique
+    </div>
+    <div class="rarity-pill" style="border-color:rgba(251,191,36,.55);background:rgba(245,158,11,.1);color:#FBBF24;">
+      <span class="rdot" style="background:#FBBF24;box-shadow:0 0 8px #FBBF24;"></span>Légendaire
+    </div>
+    <div class="rarity-pill" style="border-color:rgba(244,114,182,.65);background:rgba(236,72,153,.12);color:#F472B6;">
+      <span class="rdot" style="background:#F472B6;box-shadow:0 0 8px #F472B6;"></span>Secret 💎
+    </div>
+  </div>
+</section>
+
+<!-- =====================================================
+     FOOTER
+     ===================================================== -->
+<footer>
+  <div>
+    <div class="footer-brand">Dopamine.gg</div>
+    <div class="footer-note">Site de simulation 100% fictif · Aucun argent réel · Aucun pari réel</div>
+  </div>
+  <div class="footer-note">3 catégories · 6 caisses · 132 skins · Provably Fair</div>
+</footer>
+
+<!-- =====================================================
+     JAVASCRIPT
+     ===================================================== -->
+<script>
+/* ======================================================
+   PARTICLE SYSTEM
+   ====================================================== */
+(function(){
+  const canvas = document.getElementById('particles-canvas');
+  const ctx    = canvas.getContext('2d');
+  let W, H, particles=[];
+
+  function resize(){
+    W = canvas.width  = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  const COLORS = ['rgba(56,189,248,', 'rgba(129,140,248,', 'rgba(244,114,182,', 'rgba(251,191,36,'];
+
+  function mkParticle(){
+    const c = COLORS[Math.floor(Math.random()*COLORS.length)];
+    return {
+      x: Math.random()*W, y: Math.random()*H,
+      r: Math.random()*1.6+.4,
+      vx:(Math.random()-.5)*.35, vy:(Math.random()-.5)*.35,
+      alpha: Math.random()*.5+.1,
+      color:c, fadeDir:1, fadeSpeed:Math.random()*.005+.002,
+    };
+  }
+
+  for(let i=0;i<110;i++) particles.push(mkParticle());
+
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    for(const p of particles){
+      p.x+=p.vx; p.y+=p.vy;
+      if(p.x<0)p.x=W; if(p.x>W)p.x=0;
+      if(p.y<0)p.y=H; if(p.y>H)p.y=0;
+      p.alpha+=p.fadeDir*p.fadeSpeed;
+      if(p.alpha>0.65||p.alpha<0.05) p.fadeDir*=-1;
+      ctx.beginPath();
+      ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+      ctx.fillStyle = p.color+p.alpha+')';
+      ctx.fill();
+    }
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+
+/* ======================================================
+   DATA
+   ====================================================== */
+const CRATES = [
+  {id:'ombre-boreale',  name:'Ombre Boréale',       sub:'Reconnaissance Polaire & Furtivité',  cat:'Tactique',  price:120,   accent:'#38BDF8', emoji:'❄️', catColor:'#38BDF8'},
+  {id:'protocole-cobalt',name:'Protocole Cobalt',    sub:'Escouade Tactique & Haute Pression',  cat:'Tactique',  price:220,   accent:'#60A5FA', emoji:'🔵', catColor:'#38BDF8'},
+  {id:'matrice-saphir', name:'Matrice Saphir',       sub:'Circuits Quantiques & Fibres Optiques',cat:'Cyber',   price:380,   accent:'#22D3EE', emoji:'💠', catColor:'#A78BFA'},
+  {id:'reacteur-plasma',name:'Réacteur Plasma',      sub:'Chambres Cryo & Noyaux Améthyste',    cat:'Cyber',    price:550,   accent:'#A78BFA', emoji:'🔮', catColor:'#A78BFA'},
+  {id:'empire-dor',     name:"Empire d'Or",          sub:'Sculptures Impériales & Platine Ciselé',cat:'Reliques',price:30000, accent:'#FBBF24', emoji:'👑', catColor:'#FBBF24'},
+  {id:'abysse-prismatique',name:'Abysse Prismatique',sub:'Cristaux Vivants & Anomalies Astrales',cat:'Prestige',price:35000, accent:'#F472B6', emoji:'🌈', catColor:'#F472B6'},
+];
+
+const SKINS_VEDETTES = [
+  {weapon:'AWP',       name:'Aurore Interdite',   rarity:'secret',    color:'#F472B6', swatches:['#F472B6','#38BDF8','#FDE047'], val:'45 600 CR', emoji:'💎'},
+  {weapon:'AK-47',    name:'Relique du Pharaon',  rarity:'secret',    color:'#FBBF24', swatches:['#991B1B','#FBBF24','#D6D3D1'], val:'48 000 CR', emoji:'💎'},
+  {weapon:'AWP',      name:'Souffle du Dragon',   rarity:'secret',    color:'#EAB308', swatches:['#EAB308','#DC2626','#3F6212'], val:'48 000 CR', emoji:'💎'},
+  {weapon:'Karambit', name:'Âme Prismatique',     rarity:'secret',    color:'#EC4899', swatches:['#EC4899','#A78BFA','#FEF08A'], val:'58 000 CR', emoji:'💎'},
+  {weapon:'Karambit', name:'Griffe Polaire',      rarity:'secret',    color:'#38BDF8', swatches:['#38BDF8','#0C4A6E','#E2E8F0'], val:'66 000 CR', emoji:'💎'},
+  {weapon:'AK-47',    name:'Morsure Dorée',       rarity:'legendaire',color:'#FBBF24', swatches:['#FACC15','#1C1917','#CA8A04'], val:'24 000 CR', emoji:'⭐'},
+  {weapon:'AWP',      name:"Souffle du Dragon",   rarity:'legendaire',color:'#F59E0B', swatches:['#EAB308','#DC2626','#3F6212'], val:'14 400 CR', emoji:'⭐'},
+  {weapon:'AR-15',    name:'Hurlement de Braise', rarity:'legendaire',color:'#EF4444', swatches:['#DC2626','#F97316','#18181B'], val:'7 425 CR',  emoji:'⭐'},
+  {weapon:'AK-47',    name:'Serpent de Jade',     rarity:'mythique',  color:'#A78BFA', swatches:['#2A9D8F','#5C2E14','#EAB308'], val:'1 238 CR', emoji:'🔮'},
+  {weapon:'AWP',      name:'Nébuleuse Chromatique',rarity:'mythique', color:'#8B5CF6', swatches:['#7C3AED','#2563EB','#2DD4BF'], val:'1 045 CR', emoji:'🔮'},
+];
+
+const RARITY_LABEL = {commune:'Commune',rare:'Rare',mythique:'Mythique',legendaire:'Légendaire',secret:'Secret'};
+
+const FEATURES = [
+  {icon:'🎰', title:'Ouverture de caisse',  desc:'Roulette animée avec seed cryptographique visible. Totalement fair & transparent.'},
+  {icon:'⚡', title:'Upgrader de skins',    desc:'Misez un skin pour en obtenir un de rareté supérieure. High-risk, high-reward.'},
+  {icon:'📦', title:'Inventaire complet',   desc:'Verrouillez, vendez, équipez vos skins. Triez par rareté ou par valeur.'},
+  {icon:'🧟', title:'Zombie FPS',           desc:'Utilisez vos skins dans le mini-jeu FPS. Gagnez des crédits en survivant.'},
+  {icon:'📊', title:'Statistiques',         desc:'Suivez vos ouvertures, votre meilleure drop, vos gains totaux en temps réel.'},
+  {icon:'🎨', title:'4 Thèmes visuels',     desc:'Saphir, Ambre, Améthyste ou Rubis — personnalisez l\'ambiance du casino.'},
+];
+
+/* ======================================================
+   TICKER
+   ====================================================== */
+const TICKERS = [
+  {name:'Aurore Interdite',   weapon:'AWP',     color:'#F472B6'},
+  {name:'Morsure Dorée',      weapon:'AK-47',   color:'#FBBF24'},
+  {name:'Souffle du Dragon',  weapon:'AWP',     color:'#EAB308'},
+  {name:'Relique du Pharaon', weapon:'AK-47',   color:'#F472B6'},
+  {name:'Griffe Polaire',     weapon:'Karambit',color:'#38BDF8'},
+  {name:'Acier Trempé',       weapon:'AK-47',   color:'#A78BFA'},
+  {name:'Toile Écarlate',     weapon:'Couteau', color:'#EF4444'},
+  {name:'Dégradé Impérial',   weapon:'Karambit',color:'#60A5FA'},
+  {name:'Âme Prismatique',    weapon:'Karambit',color:'#EC4899'},
+  {name:'Cœur de Réacteur',   weapon:'Karambit',color:'#F472B6'},
+];
+const tickerEl = document.getElementById('ticker-track');
+let th = '';
+for(let r=0;r<2;r++){
+  for(const t of TICKERS){
+    th+=`<div class="tick-item"><span class="tick-dot" style="background:${t.color};box-shadow:0 0 8px ${t.color};"></span><span style="color:${t.color};font-weight:800;">${t.weapon}</span><span style="opacity:.4;padding:0 2px;">|</span><span style="color:rgba(224,242,254,.8);">${t.name}</span></div>`;
+  }
+}
+tickerEl.innerHTML = th;
+
+/* ======================================================
+   CAISSES GRID
+   ====================================================== */
+const cratesEl = document.getElementById('caisses-grid');
+cratesEl.innerHTML = CRATES.map(c=>{
+  const isBig = c.price >= 10000;
+  const priceStr = isBig ? (c.price/1000).toFixed(0)+'k CR' : c.price+' CR';
+  return `
+    <div class="caisse-card" style="border-color:${c.accent}25;box-shadow:0 8px 40px ${c.accent}0d;"
+         onmouseenter="this.style.boxShadow='0 20px 60px ${c.accent}25'"
+         onmouseleave="this.style.boxShadow='0 8px 40px ${c.accent}0d'">
+      <div class="caisse-img-fallback" style="background:linear-gradient(135deg,${c.accent}1a,${c.accent}08);font-size:4rem;">
+        ${c.emoji}
+        <div style="position:absolute;inset:0;background:linear-gradient(to bottom,transparent 50%,${c.accent}18 100%);border-bottom:1px solid ${c.accent}20;"></div>
+      </div>
+      <div class="caisse-body" style="background:linear-gradient(180deg,${c.accent}08,transparent);">
+        <div class="caisse-cat" style="color:${c.catColor};">${c.cat}</div>
+        <div class="caisse-name">${c.name}</div>
+        <div class="caisse-sub">${c.sub}</div>
+        <div class="caisse-footer">
+          <div class="caisse-price" style="color:${c.accent};">${priceStr}</div>
+          <button class="caisse-btn" style="background:${c.accent}20;color:${c.accent};border:1px solid ${c.accent}40;">
+            📦 Ouvrir
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+}).join('');
+
+/* ======================================================
+   SKINS SCROLL
+   ====================================================== */
+const skinsEl = document.getElementById('skins-scroll');
+skinsEl.innerHTML = SKINS_VEDETTES.map(s=>{
+  const isSecret = s.rarity==='secret';
+  const bg = isSecret ? `rgba(236,72,153,.07)` : s.rarity==='legendaire' ? `rgba(245,158,11,.07)` : `rgba(12,20,39,.85)`;
+  const bd = isSecret ? `rgba(244,114,182,.5)` : s.rarity==='legendaire' ? `rgba(251,191,36,.4)` : `rgba(56,189,248,.2)`;
+  return `
+    <div class="skin-card ${isSecret?'skin-secret':''}" style="border-color:${bd};background:${bg};">
+      <div class="skin-swatches">
+        ${s.swatches.map(sw=>`<span class="swatch" style="background:${sw};box-shadow:0 0 8px ${sw}88;"></span>`).join('')}
+      </div>
+      <div class="skin-weapon">${s.weapon}</div>
+      <div class="skin-name" style="color:${s.color};">${s.name}</div>
+      <div class="skin-badge" style="color:${s.color};border-color:${s.color}44;background:${s.color}15;">
+        ${s.emoji} ${RARITY_LABEL[s.rarity]}
+      </div>
+      <div class="skin-val" style="color:${s.color};">${s.val}</div>
+    </div>
+  `;
+}).join('');
+
+/* ======================================================
+   FEATURES GRID
+   ====================================================== */
+document.getElementById('features-grid').innerHTML = FEATURES.map(f=>`
+  <div class="feat-card">
+    <span class="feat-icon">${f.icon}</span>
+    <div class="feat-title">${f.title}</div>
+    <div class="feat-desc">${f.desc}</div>
+  </div>
+`).join('');
+
+/* ======================================================
+   ROULETTE
+   ====================================================== */
+const REEL = [
+  {icon:'🔫',name:'Givre Mat',         rarity:'Commune',   color:'#94A3B8',border:'rgba(148,163,184,.35)',bg:'rgba(148,163,184,.06)'},
+  {icon:'🎯',name:'Optique Saphir',    rarity:'Rare',      color:'#38BDF8',border:'rgba(56,189,248,.4)', bg:'rgba(56,189,248,.08)'},
+  {icon:'🔫',name:'Acier Boréal',      rarity:'Commune',   color:'#94A3B8',border:'rgba(148,163,184,.35)',bg:'rgba(148,163,184,.06)'},
+  {icon:'🎯',name:'Éclat de Glace',    rarity:'Rare',      color:'#38BDF8',border:'rgba(56,189,248,.4)', bg:'rgba(56,189,248,.08)'},
+  {icon:'🔮',name:'Loup de la Toundra',rarity:'Mythique',  color:'#A78BFA',border:'rgba(167,139,250,.5)',bg:'rgba(139,92,246,.1)'},
+  {icon:'🔫',name:'Brume Polaire',     rarity:'Commune',   color:'#94A3B8',border:'rgba(148,163,184,.35)',bg:'rgba(148,163,184,.06)'},
+  {icon:'🎯',name:'Chasseur Polaire',  rarity:'Rare',      color:'#38BDF8',border:'rgba(56,189,248,.4)', bg:'rgba(56,189,248,.08)'},
+  {icon:'⭐',name:'Esprit du Nord',    rarity:'Légendaire',color:'#FBBF24',border:'rgba(251,191,36,.55)',bg:'rgba(245,158,11,.1)'},
+  {icon:'🔫',name:'Sentier Gelé',      rarity:'Commune',   color:'#94A3B8',border:'rgba(148,163,184,.35)',bg:'rgba(148,163,184,.06)'},
+  {icon:'🔮',name:'Écho Radar',        rarity:'Mythique',  color:'#A78BFA',border:'rgba(167,139,250,.5)',bg:'rgba(139,92,246,.1)'},
+  {icon:'⭐',name:'Prédateur Boréal',  rarity:'Légendaire',color:'#FBBF24',border:'rgba(251,191,36,.55)',bg:'rgba(245,158,11,.1)'},
+  {icon:'💎',name:'Aurore Interdite',  rarity:'Secret',    color:'#F472B6',border:'rgba(244,114,182,.65)',bg:'rgba(236,72,153,.12)'},
+  {icon:'🎯',name:'Acier Givré',       rarity:'Rare',      color:'#38BDF8',border:'rgba(56,189,248,.4)', bg:'rgba(56,189,248,.08)'},
+  {icon:'🔮',name:'Dague des Glaciers',rarity:'Mythique',  color:'#A78BFA',border:'rgba(167,139,250,.5)',bg:'rgba(139,92,246,.1)'},
+  {icon:'⭐',name:'Griffe de Lynx',    rarity:'Légendaire',color:'#FBBF24',border:'rgba(251,191,36,.55)',bg:'rgba(245,158,11,.1)'},
+];
+
+const WINS = [
+  {emoji:'⭐',name:'Esprit du Nord',    weapon:'AWP',    rarity:'Légendaire',color:'#FBBF24',val:'+15 120 CR'},
+  {emoji:'⭐',name:'Prédateur Boréal',  weapon:'AK-47',  rarity:'Légendaire',color:'#FBBF24',val:'+17 640 CR'},
+  {emoji:'⭐',name:'Griffe de Lynx',    weapon:'Karambit',rarity:'Légendaire',color:'#FBBF24',val:'+20 880 CR'},
+  {emoji:'🔮',name:'Loup de la Toundra',weapon:'AWP',    rarity:'Mythique',  color:'#A78BFA',val:'+2 460 CR'},
+];
+
+const ITEM_W = 144;
+let spinning = false;
+
+(function buildReel(){
+  const track = document.getElementById('roulette-track');
+  let items=[];
+  for(let i=0;i<54;i++) items.push(REEL[i%REEL.length]);
+  track.innerHTML = items.map(it=>`
+    <div class="reel-cell" style="border-color:${it.border};background:${it.bg};">
+      <div class="rc-icon">${it.icon}</div>
+      <div class="rc-name" style="color:${it.color};">${it.name}</div>
+      <div class="rc-rarity" style="color:${it.color};">${it.rarity}</div>
+    </div>
+  `).join('');
+})();
+
+function triggerSpin(){
+  if(spinning) return;
+  spinning=true;
+  const btn=document.getElementById('open-btn');
+  btn.disabled=true;
+  btn.textContent='🎲 En cours…';
+  document.getElementById('win-reveal').style.display='none';
+
+  const track=document.getElementById('roulette-track');
+  track.style.transition='none';
+  track.style.transform='translateX(0)';
+
+  const WIN_IDX = 42; // hits index 42 = Légendaire
+  const windowW = document.querySelector('.roulette-window').offsetWidth;
+  const targetX = -(WIN_IDX*ITEM_W - windowW/2 + ITEM_W/2);
+  const jitter  = (Math.random()-.5)*50;
+
+  setTimeout(()=>{
+    track.style.transition='transform 4.8s cubic-bezier(.17,.84,.44,1)';
+    track.style.transform=`translateX(${targetX+jitter}px)`;
+    setTimeout(()=>{ showWin(); }, 5000);
+  }, 60);
+}
+
+function showWin(){
+  const w = WINS[Math.floor(Math.random()*WINS.length)];
+  document.getElementById('win-emoji').textContent=w.emoji;
+  document.getElementById('win-name').textContent=w.name;
+  document.getElementById('win-name').style.color=w.color;
+  document.getElementById('win-weapon').textContent=w.weapon+' · '+w.rarity;
+  document.getElementById('win-val').textContent=w.val;
+  document.getElementById('win-val').style.color=w.color+'99';
+  const rev=document.getElementById('win-reveal');
+  rev.style.display='flex';
+  rev.style.borderColor=w.color+'66';
+  rev.style.boxShadow=`0 0 60px ${w.color}22`;
+
+  const btn=document.getElementById('open-btn');
+  setTimeout(()=>{
+    btn.textContent='⚡ Rejouer · 120 CR';
+    btn.disabled=false;
+    spinning=false;
+  },1200);
+}
+
+function closeWin(){
+  document.getElementById('win-reveal').style.display='none';
+}
+
+/* ======================================================
+   SCROLL REVEAL
+   ====================================================== */
+const reveals = document.querySelectorAll('.reveal');
+const io = new IntersectionObserver((entries)=>{
+  entries.forEach(e=>{ if(e.isIntersecting){ e.target.classList.add('visible'); io.unobserve(e.target); }});
+},{threshold:.12});
+reveals.forEach(el=>io.observe(el));
+
+</script>
+</body>
+</html>

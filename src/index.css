@@ -1,0 +1,329 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-accent-50: var(--accent-50);
+  --color-accent-100: var(--accent-100);
+  --color-accent-200: var(--accent-200);
+  --color-accent-300: var(--accent-300);
+  --color-accent-400: var(--accent-400);
+  --color-accent-500: var(--accent-500);
+  --color-accent-900: var(--accent-900);
+  --color-accent-950: var(--accent-950);
+  --color-accent2-300: var(--accent2-300);
+  --color-accent2-400: var(--accent2-400);
+  --color-surface-base: var(--surface-base);
+  --color-surface-panel: var(--surface-panel);
+  --color-surface-card: var(--surface-card);
+  --color-surface-elevated: var(--surface-elevated);
+}
+
+:root,
+[data-theme='saphir'] {
+  --surface-base: #050811;
+  --surface-panel: #080e1c;
+  --surface-card: #0c1427;
+  --surface-elevated: #111c36;
+  --accent-50: #f0f9ff;
+  --accent-100: #e0f2fe;
+  --accent-200: #bae6fd;
+  --accent-300: #7dd3fc;
+  --accent-400: #38bdf8;
+  --accent-500: #0ea5e9;
+  --accent-900: #0c4a6e;
+  --accent-950: #041d2e;
+  --accent2-300: #a5b4fc;
+  --accent2-400: #818cf8;
+  --grid-line: rgba(56, 189, 248, 0.055);
+  --card-border: rgba(56, 189, 248, 0.15);
+  --card-border-hover: rgba(125, 211, 252, 0.42);
+  --card-glow: rgba(56, 189, 248, 0.2);
+  --radial-aura: rgba(56, 189, 248, 0.14);
+}
+
+[data-theme='ambre'] {
+  --surface-base: #090806;
+  --surface-panel: #12100c;
+  --surface-card: #18150f;
+  --surface-elevated: #221d14;
+  --accent-50: #fffbeb;
+  --accent-100: #fef3c7;
+  --accent-200: #fde68a;
+  --accent-300: #fcd34d;
+  --accent-400: #fbbf24;
+  --accent-500: #f59e0b;
+  --accent-900: #78350f;
+  --accent-950: #291203;
+  --accent2-300: #fdba74;
+  --accent2-400: #fb923c;
+  --grid-line: rgba(251, 191, 36, 0.045);
+  --card-border: rgba(251, 191, 36, 0.16);
+  --card-border-hover: rgba(252, 211, 77, 0.44);
+  --card-glow: rgba(245, 158, 11, 0.2);
+  --radial-aura: rgba(251, 191, 36, 0.12);
+}
+
+[data-theme='amethyste'] {
+  --surface-base: #080612;
+  --surface-panel: #0f0b20;
+  --surface-card: #15102b;
+  --surface-elevated: #1e163d;
+  --accent-50: #f5f3ff;
+  --accent-100: #ede9fe;
+  --accent-200: #ddd6fe;
+  --accent-300: #c4b5fd;
+  --accent-400: #a78bfa;
+  --accent-500: #8b5cf6;
+  --accent-900: #4c1d95;
+  --accent-950: #1e0b42;
+  --accent2-300: #f9a8d4;
+  --accent2-400: #f472b6;
+  --grid-line: rgba(167, 139, 250, 0.055);
+  --card-border: rgba(167, 139, 250, 0.16);
+  --card-border-hover: rgba(196, 181, 253, 0.45);
+  --card-glow: rgba(139, 92, 246, 0.22);
+  --radial-aura: rgba(167, 139, 250, 0.14);
+}
+
+[data-theme='rubis'] {
+  --surface-base: #0c0709;
+  --surface-panel: #150d11;
+  --surface-card: #1c1116;
+  --surface-elevated: #27161e;
+  --accent-50: #fff1f2;
+  --accent-100: #ffe4e6;
+  --accent-200: #fecdd3;
+  --accent-300: #fda4af;
+  --accent-400: #fb7185;
+  --accent-500: #f43f5e;
+  --accent-900: #881337;
+  --accent-950: #380615;
+  --accent2-300: #fdba74;
+  --accent2-400: #fb923c;
+  --grid-line: rgba(251, 113, 133, 0.05);
+  --card-border: rgba(251, 113, 133, 0.16);
+  --card-border-hover: rgba(253, 164, 175, 0.44);
+  --card-glow: rgba(244, 63, 94, 0.22);
+  --radial-aura: rgba(251, 113, 133, 0.13);
+}
+
+@layer base {
+  :root {
+    --font-display: 'Space Grotesk', system-ui, -apple-system, sans-serif;
+    --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background-color: var(--surface-base);
+    color: var(--accent-50);
+    overflow-x: hidden;
+    transition: background-color 0.35s ease, color 0.35s ease;
+  }
+
+  h1, h2, h3, h4, .font-display {
+    font-family: var(--font-display);
+  }
+
+  .font-mono-num {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Custom sleek themed scrollbar */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--surface-base);
+}
+
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--accent-400) 28%, transparent);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--accent-300) 55%, transparent);
+}
+
+/* Subtle architectural grid */
+.bg-vault-grid {
+  background-image:
+    linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+/* Top ambient aura */
+.bg-vault-aura {
+  background: radial-gradient(ellipse at top, var(--radial-aura), transparent 70%);
+}
+
+/* Glass card utility */
+.vault-card {
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--surface-card) 90%, transparent) 0%,
+    color-mix(in srgb, var(--surface-panel) 95%, transparent) 100%
+  );
+  border: 1px solid var(--card-border);
+  backdrop-filter: blur(12px);
+}
+
+.vault-card-hover {
+  transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+              border-color 0.28s ease,
+              box-shadow 0.28s ease;
+}
+
+.vault-card-hover:hover {
+  border-color: var(--card-border-hover);
+  box-shadow: 0 18px 40px -15px var(--card-glow), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* Continuous live drop marquee */
+@keyframes ticker-scroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-ticker {
+  display: flex;
+  width: max-content;
+  animation: ticker-scroll 46s linear infinite;
+}
+
+.animate-ticker:hover {
+  animation-play-state: paused;
+}
+
+/* Holographic aura for Secret rarity */
+@keyframes prism-shift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.secret-prism-border {
+  background: linear-gradient(120deg, #f472b6, #38bdf8, #fbbf24, #a78bfa, #f472b6);
+  background-size: 300% 300%;
+  animation: prism-shift 4s ease infinite;
+}
+
+/* Subtle floating animation for crate emblems */
+@keyframes gentle-float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+.animate-float {
+  animation: gentle-float 4.2s ease-in-out infinite;
+}
+
+/* Shimmer sweep on buttons and featured surfaces */
+@keyframes sheen-sweep {
+  0% {
+    transform: translateX(-140%) skewX(-18deg);
+  }
+  100% {
+    transform: translateX(240%) skewX(-18deg);
+  }
+}
+
+.sheen-overlay::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 45%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.22), transparent);
+  transform: translateX(-140%) skewX(-18deg);
+  pointer-events: none;
+}
+
+.group:hover .sheen-overlay::after,
+.sheen-active::after {
+  animation: sheen-sweep 0.9s ease-out;
+}
+
+/* Flowing gradient text highlight */
+@keyframes gradient-x {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+.animate-gradient-x {
+  background-size: 220% 220%;
+  animation: gradient-x 4.8s ease infinite;
+}
+
+/* Slow ambient architectural vault drift */
+@keyframes vault-grid-drift {
+  0% {
+    background-position: 0px 0px;
+  }
+  100% {
+    background-position: 48px 48px;
+  }
+}
+
+.animate-vault-grid {
+  animation: vault-grid-drift 22s linear infinite;
+}
+
+/* Holographic scanner sweep across featured cards */
+@keyframes scanner-beam {
+  0% {
+    transform: translateX(-120%) skewX(-16deg);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.42;
+  }
+  80% {
+    opacity: 0.35;
+  }
+  100% {
+    transform: translateX(220%) skewX(-16deg);
+    opacity: 0;
+  }
+}
+
+.animate-scanner-beam {
+  animation: scanner-beam 7.5s ease-in-out infinite;
+}
+
+/* Pulsing aura glow around featured drops & CTAs */
+@keyframes aura-pulse {
+  0%, 100% {
+    box-shadow: 0 0 18px var(--card-glow);
+  }
+  50% {
+    box-shadow: 0 0 34px var(--card-glow), 0 0 12px color-mix(in srgb, var(--accent-400) 45%, transparent);
+  }
+}
+
+.animate-aura-pulse {
+  animation: aura-pulse 3.2s ease-in-out infinite;
+}

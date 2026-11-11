@@ -1,0 +1,717 @@
+import { useCallback, useEffect, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { CRATES } from './data/catalog';
+import { RARITIES } from './data/rarities';
+import { ThemeId } from './data/themes';
+import {
+  CrateDefinition,
+  DropHistoryItem,
+  InventoryItem,
+  NavTab,
+  RarityId,
+} from './types/casino';
+import {
+  formatCredits,
+  generateSeedHash,
+  generateSimulatedDrop,
+  randomId,
+} from './utils/rng';
+import { soundEngine } from './utils/sound';
+import {
+  createDefaultStats,
+  createInitialState,
+  getNextStorageUpgradeCost,
+  loadPersistedState,
+  PersistedState,
+  savePersistedState,
+  STORAGE_UPGRADE_STEP,
+} from './utils/storage';
+import { Navbar } from './components/Navbar';
+import { LiveTicker } from './components/LiveTicker';
+import { HeroBanner } from './components/HeroBanner';
+import { CategorySection } from './components/CategorySection';
+import { CaseOpeningView } from './components/CaseOpeningView';
+import { InventoryView } from './components/InventoryView';
+import { UpgraderView } from './components/UpgraderView';
+import { StatsAndGuideView } from './components/StatsAndGuideView';
+import { ZombieGameView } from './components/ZombieGameView';
+import { WeaponInspectModal } from './components/WeaponInspectModal';
+import { TypewriterText } from './components/TypewriterText';
+import { AuthModal } from './components/AuthModal';
+import { supabase } from './utils/supabaseClient';
+import { User as SupabaseUser } from '@supabase/supabase-js';
+import {
+  WeaponInspectorProvider,
+  useWeaponInspector,
+} from './context/WeaponInspectorContext';
+
+interface ToastMessage {
+  id: string;
+  text: string;
+}
+
+const GlobalInspectorModal: React.FC = () => {
+  const { inspectedWeapon, closeInspector } = useWeaponInspector();
+  return <WeaponInspectModal weapon={inspectedWeapon} onClose={closeInspector} />;
+};
+
+function clearRemovedEquips(prev: PersistedState, removedIds: Set<string>) {
+  return {
+    equippedWeaponId:
+      prev.equippedWeaponId && removedIds.has(prev.equippedWeaponId) ? null : prev.equippedWeaponId,
+    equippedKnifeId:
+      prev.equippedKnifeId && removedIds.has(prev.equippedKnifeId) ? null : prev.equippedKnifeId,
+  };
+}
+
+export function App() {
+  const [persisted, setPersisted] = useState<PersistedState>(() => loadPersistedState());
+  const [pageMode, setPageMode] = useState<'casino' | 'zombie'>('casino');
+  const [activeTab, setActiveTab] = useState<NavTab>('boutique');
+  const [activeCrate, setActiveCrate] = useState<CrateDefinition | null>(null);
+  const [upgraderSeedId, setUpgraderSeedId] = useState<string | null>(null);
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const [currentUser, setCurrentUser] = useState<SupabaseUser | null>(null);
+  const [currentUsername, setCurrentUsername] = useState<string | null>(null);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+
+  // Charger la session Supabase et écouter les changements
+  const loadCloudProfile = useCallback(async (user: SupabaseUser) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Erreur Supabase:', error);
+        return;
+      }
+
+      if (data) {
+        setCurrentUsername(data.username || null);
+        setPersisted((prev) => ({
+          ...prev,
+          balance: Number(data.credits ?? prev.balance),
+          inventory: Array.isArray(data.inventory) ? data.inventory : prev.inventory,
+          inventoryCapacity: Number(data.storage_limit ?? prev.inventoryCapacity),
+          history: Array.isArray(data.drop_history) ? data.drop_history : prev.history,
+          stats: data.stats && typeof data.stats === 'object' ? { ...prev.stats, ...data.stats } : prev.stats,
+        }));
+      }
+    } catch (e) {
+      console.warn('Impossible de charger le profil cloud:', e);
+    }
+  }, []);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const user = session?.user ?? null;
+      setCurrentUser(user);
+      if (user) loadCloudProfile(user);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      const user = session?.user ?? null;
+      setCurrentUser(user);
+      if (user) {
+        loadCloudProfile(user);
+      } else {
+        setCurrentUsername(null);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [loadCloudProfile]);
+
+  // Sauvegarde automatique vers le Cloud Supabase lorsque le joueur est connecté
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const timeout = setTimeout(async () => {
+      try {
+        await supabase.from('profiles').upsert({
+          id: currentUser.id,
+          username: currentUsername || currentUser.email?.split('@')[0] || 'Joueur',
+          credits: persisted.balance,
+          inventory: persisted.inventory,
+          drop_history: persisted.history,
+          stats: persisted.stats,
+          storage_limit: persisted.inventoryCapacity,
+          updated_at: new Date().toISOString(),
+        });
+      } catch (err) {
+        console.warn('Erreur sauvegarde cloud:', err);
+      }
+    }, 1000);
+
+    return () => clearTimeout(timeout);
+  }, [persisted, currentUser, currentUsername]);
+
+  const [tickerDrops, setTickerDrops] = useState<DropHistoryItem[]>(() =>
+    Array.from({ length: 10 }, () => generateSimulatedDrop())
+  );
+
+  // Sync theme attribute on <html>
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', persisted.themeId);
+  }, [persisted.themeId]);
+
+  // Keep sound engine synced
+  useEffect(() => {
+    soundEngine.setEnabled(persisted.soundEnabled);
+  }, [persisted.soundEnabled]);
+
+  // Persist changes
+  useEffect(() => {
+    savePersistedState(persisted);
+  }, [persisted]);
+
+  // Periodic ambient simulated drop in live ticker
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTickerDrops((prev) => [generateSimulatedDrop(), ...prev.slice(0, 17)]);
+    }, 6500);
+    return () => clearInterval(timer);
+  }, []);
+
+  const pushToast = useCallback((text: string) => {
+    const id = randomId('toast');
+    setToasts((prev) => [...prev.slice(-2), { id, text }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 3200);
+  }, []);
+
+  const handleTabChange = (tab: NavTab) => {
+    soundEngine.playClick();
+    setActiveTab(tab);
+    if (tab === 'boutique') {
+      setActiveCrate(null);
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleSelectCrate = (crate: CrateDefinition) => {
+    soundEngine.playClick();
+    setActiveCrate(crate);
+    setActiveTab('boutique');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleSelectTheme = useCallback(
+    (themeId: ThemeId, themeName: string) => {
+      soundEngine.playClick();
+      setPersisted((prev) => ({ ...prev, themeId }));
+      pushToast(`Palette appliquée : ${themeName}`);
+    },
+    [pushToast]
+  );
+
+  const handleSpendCredits = useCallback(
+    (amount: number): boolean => {
+      if (persisted.balance < amount) {
+        return false;
+      }
+      setPersisted((prev) => {
+        if (prev.balance < amount) return prev;
+        return {
+          ...prev,
+          balance: prev.balance - amount,
+          stats: {
+            ...prev.stats,
+            totalSpent: prev.stats.totalSpent + amount,
+          },
+        };
+      });
+      return true;
+    },
+    [persisted.balance]
+  );
+
+  const handleAddItemsToInventory = useCallback(
+    (items: InventoryItem[], crateName: string) => {
+      const dropEntries: DropHistoryItem[] = items.map((it) => ({
+        id: randomId('pdrop'),
+        playerName: 'VOUS',
+        isPlayer: true,
+        crateName,
+        skinName: it.name,
+        weaponName: it.weaponName,
+        weaponClass: it.weaponClass,
+        rarity: it.rarity,
+        value: it.value,
+        timestamp: it.obtainedAt,
+        seedHash: generateSeedHash(),
+      }));
+
+      setTickerDrops((prev) => [...dropEntries, ...prev.slice(0, 17)]);
+
+      setPersisted((prev) => {
+        const nextRarityCounts = { ...prev.stats.rarityCounts };
+        let bestVal = prev.stats.bestDropValue;
+        let bestName = prev.stats.bestDropName;
+        let wonSum = 0;
+
+        for (const it of items) {
+          nextRarityCounts[it.rarity] = (nextRarityCounts[it.rarity] ?? 0) + 1;
+          wonSum += it.value;
+          if (it.value > bestVal) {
+            bestVal = it.value;
+            bestName = `${it.weaponName} | ${it.name} (${RARITIES[it.rarity].label})`;
+          }
+        }
+
+        const freeSlots = Math.max(0, prev.inventoryCapacity - prev.inventory.length);
+        const acceptedItems = items.slice(0, freeSlots);
+
+        return {
+          ...prev,
+          inventory: [...acceptedItems, ...prev.inventory],
+          history: [...dropEntries, ...prev.history.slice(0, 60)],
+          stats: {
+            ...prev.stats,
+            casesOpened: prev.stats.casesOpened + items.length,
+            totalWonValue: prev.stats.totalWonValue + wonSum,
+            bestDropValue: bestVal,
+            bestDropName: bestName,
+            rarityCounts: nextRarityCounts,
+          },
+        };
+      });
+    },
+    []
+  );
+
+  const handleSellItemsFromReveal = useCallback(
+    (itemsToSell: InventoryItem[], soldValue: number) => {
+      const ids = new Set(itemsToSell.map((i) => i.instanceId));
+      setPersisted((prev) => ({
+        ...prev,
+        balance: prev.balance + soldValue,
+        inventory: prev.inventory.filter((i) => !ids.has(i.instanceId)),
+      }));
+      pushToast(`Vendu pour +${formatCredits(soldValue)}`);
+    },
+    [pushToast]
+  );
+
+  const handleSellInventoryItem = useCallback(
+    (instanceId: string) => {
+      const target = persisted.inventory.find((i) => i.instanceId === instanceId);
+      if (!target || target.locked) return;
+      soundEngine.playCash();
+      setPersisted((prev) => ({
+        ...prev,
+        balance: prev.balance + target.value,
+        inventory: prev.inventory.filter((i) => i.instanceId !== instanceId),
+        ...clearRemovedEquips(prev, new Set([instanceId])),
+      }));
+      pushToast(`${target.weaponName} | ${target.name} vendu (+${formatCredits(target.value)})`);
+    },
+    [persisted.inventory, pushToast]
+  );
+
+  const handleSellBulk = useCallback(
+    (rarityOnly?: RarityId) => {
+      const toSell = persisted.inventory.filter(
+        (i) => !i.locked && (!rarityOnly || i.rarity === rarityOnly)
+      );
+      if (toSell.length === 0) return;
+      const sum = toSell.reduce((acc, i) => acc + i.value, 0);
+      const sellIds = new Set(toSell.map((i) => i.instanceId));
+      soundEngine.playCash();
+      setPersisted((prev) => ({
+        ...prev,
+        balance: prev.balance + sum,
+        inventory: prev.inventory.filter((i) => !sellIds.has(i.instanceId)),
+        ...clearRemovedEquips(prev, sellIds),
+      }));
+      pushToast(`${toSell.length} skin(s) vendus (+${formatCredits(sum)})`);
+    },
+    [persisted.inventory, pushToast]
+  );
+
+  const handleToggleLock = useCallback((instanceId: string) => {
+    soundEngine.playClick();
+    setPersisted((prev) => ({
+      ...prev,
+      inventory: prev.inventory.map((i) =>
+        i.instanceId === instanceId ? { ...i, locked: !i.locked } : i
+      ),
+    }));
+  }, []);
+
+  const handleSendToUpgrader = useCallback((instanceId: string) => {
+    soundEngine.playClick();
+    setUpgraderSeedId(instanceId);
+    setActiveTab('upgrader');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
+  const handleConsumeUpgraderItem = useCallback((instanceId: string) => {
+    setPersisted((prev) => ({
+      ...prev,
+      inventory: prev.inventory.filter((i) => i.instanceId !== instanceId),
+      ...clearRemovedEquips(prev, new Set([instanceId])),
+    }));
+  }, []);
+
+  const handleWinUpgrade = useCallback(
+    (newItem: InventoryItem) => {
+      const dropEntry: DropHistoryItem = {
+        id: randomId('updrop'),
+        playerName: 'VOUS',
+        isPlayer: true,
+        crateName: `Upgrade • ${newItem.crateName}`,
+        skinName: newItem.name,
+        weaponName: newItem.weaponName,
+        weaponClass: newItem.weaponClass,
+        rarity: newItem.rarity,
+        value: newItem.value,
+        timestamp: newItem.obtainedAt,
+        seedHash: generateSeedHash(),
+      };
+      setTickerDrops((prev) => [dropEntry, ...prev.slice(0, 17)]);
+
+      setPersisted((prev) => ({
+        ...prev,
+        inventory: [newItem, ...prev.inventory],
+        history: [dropEntry, ...prev.history.slice(0, 60)],
+        stats: {
+          ...prev.stats,
+          totalWonValue: prev.stats.totalWonValue + newItem.value,
+          bestDropValue: Math.max(prev.stats.bestDropValue, newItem.value),
+          bestDropName:
+            newItem.value > prev.stats.bestDropValue
+              ? `${newItem.weaponName} | ${newItem.name} (${RARITIES[newItem.rarity].label})`
+              : prev.stats.bestDropName,
+        },
+      }));
+      pushToast(`Upgrade réussi : ${newItem.weaponName} | ${newItem.name} !`);
+    },
+    [pushToast]
+  );
+
+  const handleRecordUpgradeAttempt = useCallback((won: boolean) => {
+    setPersisted((prev) => ({
+      ...prev,
+      stats: {
+        ...prev.stats,
+        upgradesAttempted: prev.stats.upgradesAttempted + 1,
+        upgradesWon: prev.stats.upgradesWon + (won ? 1 : 0),
+      },
+    }));
+  }, []);
+
+  const handleEquipInventoryItem = useCallback(
+    (instanceId: string) => {
+      const target = persisted.inventory.find((i) => i.instanceId === instanceId);
+      if (!target) return;
+      soundEngine.playClick();
+      if (target.weaponClass === 'lame') {
+        const removing = persisted.equippedKnifeId === instanceId;
+        setPersisted((prev) => ({
+          ...prev,
+          equippedKnifeId: prev.equippedKnifeId === instanceId ? null : instanceId,
+          equippedWeaponId: prev.equippedWeaponId === instanceId ? null : prev.equippedWeaponId,
+        }));
+        pushToast(
+          removing
+            ? `Couteau retiré du slot 2 : ${target.weaponName} | ${target.name}`
+            : `Couteau équipé (Touche 2) : ${target.weaponName} | ${target.name}`
+        );
+      } else {
+        const removing = persisted.equippedWeaponId === instanceId;
+        setPersisted((prev) => ({
+          ...prev,
+          equippedWeaponId: prev.equippedWeaponId === instanceId ? null : instanceId,
+        }));
+        pushToast(
+          removing
+            ? `Arme retirée du slot 1 : ${target.weaponName} | ${target.name}`
+            : `Arme principale équipée (Touche 1) : ${target.weaponName} | ${target.name}`
+        );
+      }
+    },
+    [persisted.equippedKnifeId, persisted.equippedWeaponId, persisted.inventory, pushToast]
+  );
+
+  const handleUpgradeStorage = useCallback(() => {
+    const cost = getNextStorageUpgradeCost(persisted.inventoryCapacity);
+    if (persisted.balance < cost) {
+      soundEngine.playFail();
+      pushToast(`Crédits insuffisants (${formatCredits(cost)} requis)`);
+      return;
+    }
+
+    const nextCap = persisted.inventoryCapacity + STORAGE_UPGRADE_STEP;
+    soundEngine.playCash();
+    setPersisted((prev) => {
+      const prevCost = getNextStorageUpgradeCost(prev.inventoryCapacity);
+      if (prev.balance < prevCost) return prev;
+      return {
+        ...prev,
+        balance: prev.balance - prevCost,
+        inventoryCapacity: prev.inventoryCapacity + STORAGE_UPGRADE_STEP,
+        stats: {
+          ...prev.stats,
+          totalSpent: prev.stats.totalSpent + prevCost,
+        },
+      };
+    });
+    pushToast(`Stockage augmenté à ${nextCap} places (-${formatCredits(cost)})`);
+  }, [persisted.balance, persisted.inventoryCapacity, pushToast]);
+
+  const handleExitZombieMode = useCallback(
+    (bankedCredits: number, goToShop = false) => {
+      if (bankedCredits > 0) {
+        soundEngine.playCash();
+        setPersisted((prev) => ({
+          ...prev,
+          balance: prev.balance + bankedCredits,
+        }));
+        pushToast(`Extraction Zombie réussie : +${formatCredits(bankedCredits)}`);
+      }
+      setPageMode('casino');
+      if (goToShop) {
+        setActiveTab('boutique');
+        setActiveCrate(null);
+      }
+    },
+    [pushToast]
+  );
+
+  const handleResetSession = useCallback(() => {
+    soundEngine.playClick();
+    setUpgraderSeedId(null);
+    setTickerDrops(Array.from({ length: 10 }, () => generateSimulatedDrop()));
+    setPersisted({
+      ...createInitialState(),
+      stats: createDefaultStats(),
+      soundEnabled: persisted.soundEnabled,
+      themeId: persisted.themeId,
+    });
+    pushToast('Session réinitialisée à 3 000 CR');
+  }, [persisted.soundEnabled, persisted.themeId, pushToast]);
+
+  return (
+    <WeaponInspectorProvider>
+      {pageMode === 'zombie' ? (
+        <ZombieGameView
+          inventory={persisted.inventory}
+          equippedWeaponId={persisted.equippedWeaponId}
+          equippedKnifeId={persisted.equippedKnifeId}
+          balance={persisted.balance}
+          onExit={(bankedCredits) => handleExitZombieMode(bankedCredits, false)}
+          onGoToShop={(bankedCredits) => handleExitZombieMode(bankedCredits, true)}
+        />
+      ) : (
+      <div className="relative min-h-screen bg-surface-base text-accent-50 transition-colors duration-300">
+      {/* Ambient dynamic architectural background */}
+      <div className="bg-vault-grid animate-vault-grid pointer-events-none fixed inset-0 opacity-70" />
+      <div className="bg-vault-aura pointer-events-none fixed inset-x-0 top-0 h-[440px]" />
+      <motion.div
+        animate={{ x: [0, 35, 0], y: [0, -24, 0], opacity: [0.16, 0.28, 0.16] }}
+        transition={{ duration: 14, repeat: Infinity, ease: 'easeInOut' }}
+        className="pointer-events-none fixed -left-24 top-1/3 h-80 w-80 rounded-full bg-accent-500/15 blur-[110px]"
+      />
+      <motion.div
+        animate={{ x: [0, -30, 0], y: [0, 26, 0], opacity: [0.14, 0.24, 0.14] }}
+        transition={{ duration: 16, repeat: Infinity, ease: 'easeInOut', delay: 2 }}
+        className="pointer-events-none fixed -right-24 bottom-1/4 h-80 w-80 rounded-full bg-accent2-400/15 blur-[110px]"
+      />
+
+      <div className="relative z-10 flex min-h-screen flex-col">
+        <Navbar
+          activeTab={activeTab}
+          onTabChange={handleTabChange}
+          balance={persisted.balance}
+          inventoryCount={persisted.inventory.length}
+          inventoryCapacity={persisted.inventoryCapacity}
+          soundEnabled={persisted.soundEnabled}
+          onToggleSound={() =>
+            setPersisted((prev) => ({ ...prev, soundEnabled: !prev.soundEnabled }))
+          }
+          onOpenZombie={() => setPageMode('zombie')}
+          themeId={persisted.themeId}
+          onSelectTheme={handleSelectTheme}
+          onOpenAuth={() => setAuthModalOpen(true)}
+          userEmail={currentUser?.email ?? null}
+          username={currentUsername}
+        />
+
+        <LiveTicker drops={tickerDrops} />
+
+        {/* Main Content */}
+        <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6">
+          <AnimatePresence mode="wait" initial={false}>
+            {activeTab === 'boutique' && activeCrate === null && (
+              <motion.div
+                key="boutique-home"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.16 }}
+                className="space-y-10"
+              >
+                <HeroBanner
+                  onExploreClick={() => {
+                    document
+                      .getElementById('categories-section')
+                      ?.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                  onOpenFeaturedCrate={() =>
+                    handleSelectCrate(CRATES[CRATES.length - 1])
+                  }
+                />
+                <CategorySection onSelectCrate={handleSelectCrate} />
+              </motion.div>
+            )}
+
+            {activeTab === 'boutique' && activeCrate !== null && (
+              <motion.div
+                key={`crate-${activeCrate.id}`}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.16 }}
+              >
+                <CaseOpeningView
+                  crate={activeCrate}
+                  balance={persisted.balance}
+                  inventoryCount={persisted.inventory.length}
+                  inventoryCapacity={persisted.inventoryCapacity}
+                  onBack={() => {
+                    soundEngine.playClick();
+                    setActiveCrate(null);
+                  }}
+                  onSpendCredits={handleSpendCredits}
+                  onAddItemsToInventory={handleAddItemsToInventory}
+                  onSellItemsFromReveal={handleSellItemsFromReveal}
+                />
+              </motion.div>
+            )}
+
+            {activeTab === 'inventaire' && (
+              <motion.div
+                key="inventaire"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+              >
+                <InventoryView
+                  items={persisted.inventory}
+                  inventoryCapacity={persisted.inventoryCapacity}
+                  balance={persisted.balance}
+                  equippedWeaponId={persisted.equippedWeaponId}
+                  equippedKnifeId={persisted.equippedKnifeId}
+                  onEquipItem={handleEquipInventoryItem}
+                  onSellItem={handleSellInventoryItem}
+                  onSellBulk={handleSellBulk}
+                  onToggleLock={handleToggleLock}
+                  onSendToUpgrader={handleSendToUpgrader}
+                  onUpgradeStorage={handleUpgradeStorage}
+                  onGoToShop={() => handleTabChange('boutique')}
+                />
+              </motion.div>
+            )}
+
+            {activeTab === 'upgrader' && (
+              <motion.div
+                key="upgrader"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+              >
+                <UpgraderView
+                  inventory={persisted.inventory}
+                  preselectedInstanceId={upgraderSeedId}
+                  onConsumeItem={handleConsumeUpgraderItem}
+                  onWinUpgrade={handleWinUpgrade}
+                  onRecordAttempt={handleRecordUpgradeAttempt}
+                  onGoToShop={() => handleTabChange('boutique')}
+                />
+              </motion.div>
+            )}
+
+            {activeTab === 'statistiques' && (
+              <motion.div
+                key="statistiques"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+              >
+                <StatsAndGuideView
+                  stats={persisted.stats}
+                  history={persisted.history}
+                  onResetSession={handleResetSession}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </main>
+
+        {/* Clean Footer */}
+        <footer className="border-t border-accent-500/15 bg-surface-base/90 py-6">
+          <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 px-4 text-center text-xs text-accent-200/55 sm:flex-row sm:px-6 sm:text-left">
+            <div>
+              <strong className="text-accent-300">Dopamine.gg</strong>{' '}
+              <TypewriterText
+                persistKey="footer-disclaimer"
+                delayMs={180}
+                speedMs={42}
+                triggerOnView={true}
+                text="— Site de simulation de casino entièrement fictif. Aucun argent réel, aucun pari réel."
+              />
+            </div>
+            <div>
+              <TypewriterText
+                persistKey="footer-features"
+                delayMs={300}
+                speedMs={42}
+                triggerOnView={true}
+                text="Modèles 3D interactifs, Upgrader probabiliste & mode Zombie FPS."
+              />
+            </div>
+          </div>
+        </footer>
+      </div>
+
+      {/* Floating Toasts */}
+      <div className="pointer-events-none fixed bottom-5 right-5 z-50 flex flex-col gap-2">
+        <AnimatePresence>
+          {toasts.map((t) => (
+            <motion.div
+              key={t.id}
+              initial={{ opacity: 0, y: 12, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -8, scale: 0.95 }}
+              className="rounded-xl border border-accent-400/40 bg-surface-card/95 px-4 py-2.5 text-xs font-semibold text-accent-200 shadow-[0_10px_30px_rgba(0,0,0,0.6)] backdrop-blur-md"
+            >
+              {t.text}
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+      {/* Interactive 3D Weapon Inspection Modal */}
+      <GlobalInspectorModal />
+
+      {/* Auth / Cloud Modal */}
+      <AuthModal
+        isOpen={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        currentUser={currentUser}
+        currentUsername={currentUsername}
+        onAuthSuccess={() => {
+          if (currentUser) loadCloudProfile(currentUser);
+        }}
+      />
+      </div>
+      )}
+    </WeaponInspectorProvider>
+  );
+}
+
+export default App;
