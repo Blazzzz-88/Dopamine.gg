@@ -103,13 +103,57 @@ export function App() {
   const [currentUsername, setCurrentUsername] = useState<string | null>(null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [challengesModalOpen, setChallengesModalOpen] = useState(false);
+  const [cloudSyncStatus, setCloudSyncStatus] = useState<'idle' | 'saving' | 'synced'>('idle');
   const pageModeRef = useRef(pageMode);
   pageModeRef.current = pageMode;
   const loadedCloudUserIdRef = useRef<string | null>(null);
+  const isCloudLoadedRef = useRef<boolean>(false);
   const resolvingUpgradeIdRef = useRef<string | null>(null);
+  const persistedRef = useRef(persisted);
+  persistedRef.current = persisted;
+
+  // Fonction de sauvegarde immédiate et garantie vers Supabase
+  const saveToCloudNow = useCallback(async (stateToSave?: PersistedState) => {
+    if (!currentUser || !isCloudLoadedRef.current) return;
+    const current = stateToSave || persistedRef.current;
+    setCloudSyncStatus('saving');
+    try {
+      const { error } = await supabase.from('profiles').upsert({
+        id: currentUser.id,
+        username: currentUsername || currentUser.email?.split('@')[0] || 'Joueur',
+        credits: current.balance,
+        inventory: current.inventory,
+        drop_history: current.history,
+        stats: current.stats,
+        storage_limit: current.inventoryCapacity,
+        updated_at: new Date().toISOString(),
+      });
+      if (error) {
+        console.warn('Erreur sauvegarde Supabase:', error.message);
+        setCloudSyncStatus('idle');
+      } else {
+        setCloudSyncStatus('synced');
+      }
+    } catch (err) {
+      console.warn('Exception sauvegarde cloud:', err);
+      setCloudSyncStatus('idle');
+    }
+  }, [currentUser, currentUsername]);
+
+  // Sauvegarde d'urgence si le joueur quitte la page / ferme l'onglet
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (currentUser && isCloudLoadedRef.current) {
+        saveToCloudNow();
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [currentUser, saveToCloudNow]);
 
   // Charger la session Supabase et écouter les changements
   const loadCloudProfile = useCallback(async (user: SupabaseUser) => {
+    setCloudSyncStatus('saving');
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -119,22 +163,32 @@ export function App() {
 
       if (error && error.code !== 'PGRST116') {
         console.error('Erreur Supabase:', error);
+        setCloudSyncStatus('idle');
         return;
       }
 
       if (data) {
         setCurrentUsername(data.username || null);
-        setPersisted((prev) => ({
-          ...prev,
+        const cloudState: PersistedState = {
+          ...persistedRef.current,
           balance: typeof data.credits === 'number' ? data.credits : 3000,
           inventory: Array.isArray(data.inventory) ? data.inventory : [],
           inventoryCapacity: typeof data.storage_limit === 'number' ? data.storage_limit : 25,
-          history: Array.isArray(data.drop_history) ? data.drop_history : prev.history,
-          stats: data.stats && typeof data.stats === 'object' ? { ...prev.stats, ...data.stats } : prev.stats,
-        }));
+          history: Array.isArray(data.drop_history) ? data.drop_history : persistedRef.current.history,
+          stats: data.stats && typeof data.stats === 'object' ? { ...persistedRef.current.stats, ...data.stats } : persistedRef.current.stats,
+        };
+        setPersisted(cloudState);
+        savePersistedState(cloudState);
+        isCloudLoadedRef.current = true;
+        setCloudSyncStatus('synced');
+      } else {
+        // Nouveau profil dans la base
+        isCloudLoadedRef.current = true;
+        setCloudSyncStatus('synced');
       }
     } catch (e) {
       console.warn('Impossible de charger le profil cloud:', e);
+      setCloudSyncStatus('idle');
     }
   }, []);
 
@@ -152,43 +206,32 @@ export function App() {
       const user = session?.user ?? null;
       setCurrentUser(user);
       if (user) {
-        // Ignore les événements focus/Alt+Tab/TOKEN_REFRESHED pour un utilisateur déjà chargé
         if (loadedCloudUserIdRef.current !== user.id && event !== 'TOKEN_REFRESHED') {
           loadedCloudUserIdRef.current = user.id;
           loadCloudProfile(user);
         }
       } else {
         loadedCloudUserIdRef.current = null;
+        isCloudLoadedRef.current = false;
         setCurrentUsername(null);
+        setCloudSyncStatus('idle');
       }
     });
 
     return () => subscription.unsubscribe();
   }, [loadCloudProfile]);
 
-  // Sauvegarde automatique vers le Cloud Supabase lorsque le joueur est connecté
+  // Sauvegarde automatique vers le Cloud Supabase lorsque le joueur effectue une action (avec debounce court 600ms)
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser || !isCloudLoadedRef.current) return;
 
-    const timeout = setTimeout(async () => {
-      try {
-        await supabase.from('profiles').upsert({
-          id: currentUser.id,
-          username: currentUsername || currentUser.email?.split('@')[0] || 'Joueur',
-          credits: persisted.balance,
-          inventory: persisted.inventory,
-          drop_history: persisted.history,
-          stats: persisted.stats,
-          storage_limit: persisted.inventoryCapacity,
-          updated_at: new Date().toISOString(),
-        });
-      } catch (err) {
-        console.warn('Erreur sauvegarde cloud:', err);
-      }
-    }, 1000);
+    setCloudSyncStatus('saving');
+    const timeout = setTimeout(() => {
+      saveToCloudNow(persisted);
+    }, 600);
 
     return () => clearTimeout(timeout);
-  }, [persisted, currentUser, currentUsername]);
+  }, [persisted, currentUser, saveToCloudNow]);
 
   const [tickerDrops, setTickerDrops] = useState<DropHistoryItem[]>(() =>
     Array.from({ length: 10 }, () => generateSimulatedDrop())
@@ -808,6 +851,7 @@ export function App() {
           onOpenAuth={() => setAuthModalOpen(true)}
           userEmail={currentUser?.email ?? null}
           username={currentUsername}
+          cloudSyncStatus={cloudSyncStatus}
         />
 
         <LiveTicker drops={tickerDrops} />

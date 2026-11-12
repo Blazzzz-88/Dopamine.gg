@@ -15,6 +15,8 @@ import {
   Palette,
   User,
   Trophy,
+  Cloud,
+  RefreshCw,
 } from 'lucide-react';
 import { ThemeId, THEMES } from '../data/themes';
 import { NavTab } from '../types/casino';
@@ -37,6 +39,7 @@ interface NavbarProps {
   onOpenAuth: () => void;
   userEmail: string | null;
   username: string | null;
+  cloudSyncStatus?: 'synced' | 'saving' | 'idle';
 }
 
 const NAV_ITEMS: { id: NavTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
@@ -63,6 +66,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenAuth,
   userEmail,
   username,
+  cloudSyncStatus = 'idle',
 }) => {
   const [creditMenuOpen, setCreditMenuOpen] = useState(false);
   const creditMenuRef = useRef<HTMLDivElement | null>(null);
@@ -217,7 +221,11 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Bouton Compte / Cloud */}
           <button
             onClick={onOpenAuth}
-            title={userEmail ? `Connecté (${username || userEmail})` : 'Connexion / Sauvegarde Cloud'}
+            title={
+              userEmail
+                ? `Connecté (${username || userEmail}) - ${cloudSyncStatus === 'saving' ? 'Sauvegarde...' : 'Sauvegardé'}`
+                : 'Connexion / Sauvegarde Cloud'
+            }
             className={`flex items-center gap-1.5 h-10 px-3 rounded-xl border transition ${
               userEmail
                 ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20'
@@ -228,6 +236,15 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span className="hidden md:inline text-xs font-semibold max-w-[100px] truncate">
               {username || (userEmail ? 'Compte' : 'Connexion')}
             </span>
+            {userEmail && (
+              <span className="ml-0.5" title={cloudSyncStatus === 'saving' ? 'Sauvegarde cloud en cours...' : 'Synchronisé'}>
+                {cloudSyncStatus === 'saving' ? (
+                  <RefreshCw className="h-3 w-3 animate-spin text-amber-400" />
+                ) : (
+                  <Cloud className="h-3 w-3 text-emerald-400" />
+                )}
+              </span>
+            )}
           </button>
 
           <div
