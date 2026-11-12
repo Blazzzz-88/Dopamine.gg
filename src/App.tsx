@@ -49,6 +49,14 @@ import {
   ZombieChallengeEvent,
 } from './utils/zombieChallenges';
 import { supabase } from './utils/supabaseClient';
+import {
+  buildCloudBaseline,
+  CloudBaseline,
+  CloudProfileRow,
+  hasCloudSyncedDiff,
+  mergeServerEditsIntoLocalState,
+  parseSafeCloudNumber,
+} from './utils/cloudSync';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 import {
   WeaponInspectorProvider,
@@ -108,43 +116,146 @@ export function App() {
   pageModeRef.current = pageMode;
   const loadedCloudUserIdRef = useRef<string | null>(null);
   const isCloudLoadedRef = useRef<boolean>(false);
+  const profileExistsRef = useRef<boolean>(false);
+  const cloudBaselineRef = useRef<CloudBaseline | null>(null);
+  const hasDirtyChangesRef = useRef<boolean>(false);
+  const saveInFlightRef = useRef<boolean>(false);
+  const queuedSaveRef = useRef<boolean>(false);
   const resolvingUpgradeIdRef = useRef<string | null>(null);
   const persistedRef = useRef(persisted);
   persistedRef.current = persisted;
 
-  // Fonction de sauvegarde immédiate et garantie vers Supabase
-  const saveToCloudNow = useCallback(async (stateToSave?: PersistedState) => {
-    if (!currentUser || !isCloudLoadedRef.current) return;
-    const current = stateToSave || persistedRef.current;
-    setCloudSyncStatus('saving');
-    try {
-      const { error } = await supabase.from('profiles').upsert({
-        id: currentUser.id,
-        username: currentUsername || currentUser.email?.split('@')[0] || 'Joueur',
-        credits: current.balance,
-        inventory: current.inventory,
-        drop_history: current.history,
-        stats: current.stats,
-        storage_limit: current.inventoryCapacity,
-        updated_at: new Date().toISOString(),
-      });
-      if (error) {
-        console.warn('Erreur sauvegarde Supabase:', error.message);
-        setCloudSyncStatus('idle');
-      } else {
-        setCloudSyncStatus('synced');
-      }
-    } catch (err) {
-      console.warn('Exception sauvegarde cloud:', err);
-      setCloudSyncStatus('idle');
-    }
-  }, [currentUser, currentUsername]);
+  const pushToast = useCallback((text: string) => {
+    const id = randomId('toast');
+    setToasts((prev) => [...prev.slice(-2), { id, text }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 3200);
+  }, []);
 
-  // Sauvegarde d'urgence si le joueur quitte la page / ferme l'onglet
+  // Applique les modifications faites par l'admin dans Supabase sans écraser les données locales
+  const applyRemoteCloudRow = useCallback(
+    (row: CloudProfileRow) => {
+      if (row.username) {
+        setCurrentUsername(row.username);
+      }
+      if (!cloudBaselineRef.current) return;
+
+      const merged = mergeServerEditsIntoLocalState(
+        persistedRef.current,
+        cloudBaselineRef.current,
+        row
+      );
+      if (!merged.adminChanged) return;
+
+      cloudBaselineRef.current = merged.nextBaseline;
+      hasDirtyChangesRef.current = false;
+      setPersisted(merged.nextState);
+      savePersistedState(merged.nextState);
+
+      if (merged.creditsDeltaFromAdmin > 0) {
+        pushToast(`+${formatCredits(merged.creditsDeltaFromAdmin)} reçus sur votre compte !`);
+      }
+    },
+    [pushToast]
+  );
+
+  // Fonction de sauvegarde immédiate vers Supabase avec fusion anti-écrasement admin
+  const saveToCloudNow = useCallback(
+    async (stateToSave?: PersistedState) => {
+      if (!currentUser || !isCloudLoadedRef.current) return;
+      if (saveInFlightRef.current) {
+        queuedSaveRef.current = true;
+        return;
+      }
+
+      const current = stateToSave || persistedRef.current;
+      if (profileExistsRef.current && !hasCloudSyncedDiff(current, cloudBaselineRef.current)) {
+        hasDirtyChangesRef.current = false;
+        setCloudSyncStatus('synced');
+        return;
+      }
+
+      saveInFlightRef.current = true;
+      setCloudSyncStatus('saving');
+
+      try {
+        let stateToWrite = current;
+        let adminCreditsDelta = 0;
+        let adminUpdatedDuringSave = false;
+
+        if (profileExistsRef.current && cloudBaselineRef.current) {
+          const { data: latestRow } = await supabase
+            .from('profiles')
+            .select('id,username,credits,inventory,drop_history,stats,storage_limit')
+            .eq('id', currentUser.id)
+            .single();
+
+          if (latestRow) {
+            const merged = mergeServerEditsIntoLocalState(
+              current,
+              cloudBaselineRef.current,
+              latestRow as CloudProfileRow
+            );
+            stateToWrite = merged.nextState;
+            adminCreditsDelta = merged.creditsDeltaFromAdmin;
+            adminUpdatedDuringSave = merged.adminChanged;
+          }
+        }
+
+        const payload = {
+          credits: stateToWrite.balance,
+          inventory: stateToWrite.inventory,
+          drop_history: stateToWrite.history,
+          stats: stateToWrite.stats,
+          storage_limit: stateToWrite.inventoryCapacity,
+          updated_at: new Date().toISOString(),
+        };
+
+        const { error } = profileExistsRef.current
+          ? await supabase.from('profiles').update(payload).eq('id', currentUser.id)
+          : await supabase.from('profiles').upsert({
+              id: currentUser.id,
+              username: currentUsername || currentUser.email?.split('@')[0] || 'Joueur',
+              ...payload,
+            });
+
+        if (error) {
+          console.warn('Erreur sauvegarde Supabase:', error.message);
+          setCloudSyncStatus('idle');
+        } else {
+          profileExistsRef.current = true;
+          cloudBaselineRef.current = buildCloudBaseline(stateToWrite);
+          hasDirtyChangesRef.current = false;
+          setCloudSyncStatus('synced');
+
+          if (adminUpdatedDuringSave) {
+            setPersisted(stateToWrite);
+            savePersistedState(stateToWrite);
+            if (adminCreditsDelta > 0) {
+              pushToast(`+${formatCredits(adminCreditsDelta)} reçus sur votre compte !`);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Exception sauvegarde cloud:', err);
+        setCloudSyncStatus('idle');
+      } finally {
+        saveInFlightRef.current = false;
+        if (queuedSaveRef.current) {
+          queuedSaveRef.current = false;
+          void saveToCloudNow(persistedRef.current);
+        }
+      }
+    },
+    [currentUser, currentUsername, pushToast]
+  );
+
+  // Sauvegarde avant fermeture UNIQUEMENT s'il y a des modifications locales non encore envoyées
   useEffect(() => {
     const handleBeforeUnload = () => {
-      if (currentUser && isCloudLoadedRef.current) {
-        saveToCloudNow();
+      if (currentUser && isCloudLoadedRef.current && hasDirtyChangesRef.current) {
+        void saveToCloudNow(persistedRef.current);
       }
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
@@ -168,21 +279,30 @@ export function App() {
       }
 
       if (data) {
+        profileExistsRef.current = true;
         setCurrentUsername(data.username || null);
         const cloudState: PersistedState = {
           ...persistedRef.current,
-          balance: typeof data.credits === 'number' ? data.credits : 3000,
+          balance: parseSafeCloudNumber(data.credits, 3000),
           inventory: Array.isArray(data.inventory) ? data.inventory : [],
-          inventoryCapacity: typeof data.storage_limit === 'number' ? data.storage_limit : 25,
+          inventoryCapacity: parseSafeCloudNumber(data.storage_limit, 25),
           history: Array.isArray(data.drop_history) ? data.drop_history : persistedRef.current.history,
-          stats: data.stats && typeof data.stats === 'object' ? { ...persistedRef.current.stats, ...data.stats } : persistedRef.current.stats,
+          stats:
+            data.stats && typeof data.stats === 'object'
+              ? { ...persistedRef.current.stats, ...data.stats }
+              : persistedRef.current.stats,
         };
+        cloudBaselineRef.current = buildCloudBaseline(cloudState);
+        hasDirtyChangesRef.current = false;
         setPersisted(cloudState);
         savePersistedState(cloudState);
         isCloudLoadedRef.current = true;
         setCloudSyncStatus('synced');
       } else {
-        // Nouveau profil dans la base
+        // Nouveau profil à initialiser dans la base
+        profileExistsRef.current = false;
+        cloudBaselineRef.current = buildCloudBaseline(persistedRef.current);
+        hasDirtyChangesRef.current = false;
         isCloudLoadedRef.current = true;
         setCloudSyncStatus('synced');
       }
@@ -202,7 +322,9 @@ export function App() {
       }
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
       const user = session?.user ?? null;
       setCurrentUser(user);
       if (user) {
@@ -213,6 +335,9 @@ export function App() {
       } else {
         loadedCloudUserIdRef.current = null;
         isCloudLoadedRef.current = false;
+        profileExistsRef.current = false;
+        cloudBaselineRef.current = null;
+        hasDirtyChangesRef.current = false;
         setCurrentUsername(null);
         setCloudSyncStatus('idle');
       }
@@ -221,14 +346,87 @@ export function App() {
     return () => subscription.unsubscribe();
   }, [loadCloudProfile]);
 
-  // Sauvegarde automatique vers le Cloud Supabase lorsque le joueur effectue une action (avec debounce court 600ms)
+  // Synchronisation en direct depuis Supabase (Realtime + retour sur l'onglet + polling léger)
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const pullRemoteUpdates = async () => {
+      if (!isCloudLoadedRef.current || hasDirtyChangesRef.current || saveInFlightRef.current) {
+        return;
+      }
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('id,username,credits,inventory,drop_history,stats,storage_limit')
+          .eq('id', currentUser.id)
+          .single();
+
+        if (!error && data) {
+          applyRemoteCloudRow(data as CloudProfileRow);
+        }
+      } catch {
+        // Ignore transient network errors during background poll
+      }
+    };
+
+    const channel = supabase
+      .channel(`profile-sync-${currentUser.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'profiles',
+          filter: `id=eq.${currentUser.id}`,
+        },
+        (payload) => {
+          if (
+            payload.new &&
+            isCloudLoadedRef.current &&
+            !hasDirtyChangesRef.current &&
+            !saveInFlightRef.current
+          ) {
+            applyRemoteCloudRow(payload.new as CloudProfileRow);
+          }
+        }
+      )
+      .subscribe();
+
+    const onFocusOrVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void pullRemoteUpdates();
+      }
+    };
+
+    window.addEventListener('focus', onFocusOrVisible);
+    document.addEventListener('visibilitychange', onFocusOrVisible);
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        void pullRemoteUpdates();
+      }
+    }, 12000);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocusOrVisible);
+      document.removeEventListener('visibilitychange', onFocusOrVisible);
+      void supabase.removeChannel(channel);
+    };
+  }, [currentUser, applyRemoteCloudRow]);
+
+  // Sauvegarde automatique vers le Cloud Supabase uniquement si les champs cloud ont changé
   useEffect(() => {
     if (!currentUser || !isCloudLoadedRef.current) return;
+    if (!hasCloudSyncedDiff(persisted, cloudBaselineRef.current)) {
+      hasDirtyChangesRef.current = false;
+      return;
+    }
 
+    hasDirtyChangesRef.current = true;
     setCloudSyncStatus('saving');
     const timeout = setTimeout(() => {
-      saveToCloudNow(persisted);
-    }, 600);
+      void saveToCloudNow(persisted);
+    }, 500);
 
     return () => clearTimeout(timeout);
   }, [persisted, currentUser, saveToCloudNow]);
@@ -258,14 +456,6 @@ export function App() {
       setTickerDrops((prev) => [generateSimulatedDrop(), ...prev.slice(0, 17)]);
     }, 6500);
     return () => clearInterval(timer);
-  }, []);
-
-  const pushToast = useCallback((text: string) => {
-    const id = randomId('toast');
-    setToasts((prev) => [...prev.slice(-2), { id, text }]);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 3200);
   }, []);
 
   const handleTabChange = (tab: NavTab) => {
