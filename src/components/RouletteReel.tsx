@@ -17,6 +17,7 @@ interface RouletteReelProps {
   jitterOffset: number;
   needleColor?: string;
   crateNameBySkinId?: Record<string, string>;
+  muteSound?: boolean;
   onSpinComplete?: () => void;
 }
 
@@ -29,6 +30,7 @@ export const RouletteReel: React.FC<RouletteReelProps> = ({
   jitterOffset,
   needleColor,
   crateNameBySkinId,
+  muteSound = false,
   onSpinComplete,
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -81,7 +83,7 @@ export const RouletteReel: React.FC<RouletteReelProps> = ({
       const centerInTrack = -currentX + containerWidth / 2;
       const activeSlot = Math.floor(centerInTrack / SLOT_STEP);
       if (activeSlot !== lastTickSlot) {
-        if (lastTickSlot !== -1) {
+        if (!muteSound && lastTickSlot !== -1) {
           soundEngine.playTick(1 - progress * 0.6);
         }
         lastTickSlot = activeSlot;

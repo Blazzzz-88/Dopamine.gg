@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import App from './App';
 import { CaseOpeningView } from './components/CaseOpeningView';
+import { DropRevealModal } from './components/DropRevealModal';
 import { InventoryView } from './components/InventoryView';
 import { UpgraderView } from './components/UpgraderView';
 import { ContractView } from './components/ContractView';
@@ -40,6 +41,48 @@ describe('Rendu des composants principaux (SSR smoke test)', () => {
     expect(html).toContain(crate.name);
     expect(html).toContain('22 skins');
     expect(html).toContain('Secret');
+    expect(html).toContain('1x');
+    expect(html).toContain('2x');
+    expect(html).toContain('3x');
+    expect(html).toContain('5x');
+    expect(html).toContain('10x');
+  });
+
+  it('rend DropRevealModal avec un drop groupé de 5 ou 10 skins', () => {
+    const crate = CRATES[0];
+    const fiveItems = Array.from({ length: 5 }, (_, idx) =>
+      createInventoryItem(crate, crate.skins[idx % crate.skins.length], 'ouverture')
+    );
+    const html5 = renderToStaticMarkup(
+      <DropRevealModal
+        items={fiveItems}
+        cratePrice={crate.price}
+        canReopen={true}
+        onKeepAll={() => {}}
+        onSellItem={() => {}}
+        onSellAll={() => {}}
+        onReopen={() => {}}
+      />
+    );
+    expect(html5).toContain('5 skins obtenus !');
+    expect(html5).toContain('Tout vendre');
+    expect(html5).toContain('Garder dans l’inventaire');
+
+    const tenItems = Array.from({ length: 10 }, (_, idx) =>
+      createInventoryItem(crate, crate.skins[idx % crate.skins.length], 'ouverture')
+    );
+    const html10 = renderToStaticMarkup(
+      <DropRevealModal
+        items={tenItems}
+        cratePrice={crate.price}
+        canReopen={true}
+        onKeepAll={() => {}}
+        onSellItem={() => {}}
+        onSellAll={() => {}}
+        onReopen={() => {}}
+      />
+    );
+    expect(html10).toContain('10 skins obtenus !');
   });
 
   it('rend InventoryView, UpgraderView et StatsAndGuideView sans erreur', () => {

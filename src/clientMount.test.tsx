@@ -690,4 +690,81 @@ describe('Client mount smoke test (jsdom + StrictMode)', () => {
     });
     container.remove();
   });
+
+  it('permet de sélectionner 5x et 10x caisses et adapte le coût, les roulettes et l’affichage', async () => {
+    localStorage.clear();
+    savePersistedState({
+      ...createInitialState(),
+      balance: 50000,
+      inventory: [],
+      inventoryCapacity: 25,
+    });
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <StrictMode>
+          <App />
+        </StrictMode>
+      );
+    });
+    await new Promise((r) => setTimeout(r, 80));
+
+    // Clic sur la caisse Ombre Boréale
+    const crateCard = Array.from(container.querySelectorAll('article')).find((el) =>
+      el.textContent?.includes('Ombre Boréale')
+    ) as HTMLElement | undefined;
+    expect(crateCard).toBeDefined();
+    await act(async () => {
+      crateCard?.click();
+    });
+    for (let t = 0; t < 20; t++) {
+      if (container.innerHTML.includes('Acheter &amp; Ouvrir') || container.innerHTML.includes('Acheter & Ouvrir')) break;
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 40));
+      });
+    }
+
+    // Vérifier la présence des sélecteurs 1x, 2x, 3x, 5x, 10x
+    const qButtons = Array.from(container.querySelectorAll('button')).filter((b) =>
+      ['1x', '2x', '3x', '5x', '10x'].includes(b.textContent?.trim() ?? '')
+    );
+    expect(qButtons.map((b) => b.textContent?.trim())).toEqual(['1x', '2x', '3x', '5x', '10x']);
+
+    // Clic sur 5x
+    const btn5x = qButtons.find((b) => b.textContent?.trim() === '5x');
+    await act(async () => {
+      btn5x?.click();
+    });
+    await new Promise((r) => setTimeout(r, 60));
+
+    // Le bouton d'achat doit afficher le coût x5 (120 * 5 = 600 CR)
+    const openBtn5 = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Acheter & Ouvrir')
+    );
+    expect(openBtn5?.textContent).toContain('600');
+    expect(container.innerHTML).toContain('Caisse #5');
+
+    // Clic sur 10x
+    const btn10x = qButtons.find((b) => b.textContent?.trim() === '10x');
+    await act(async () => {
+      btn10x?.click();
+    });
+    await new Promise((r) => setTimeout(r, 60));
+
+    // Le bouton d'achat doit afficher le coût x10 (120 * 10 = 1 200 CR)
+    const openBtn10 = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Acheter & Ouvrir')
+    );
+    expect(openBtn10?.textContent?.replace(/\s+/g, ' ')).toContain('1 200');
+    expect(container.innerHTML).toContain('Caisse #10');
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+  });
 });

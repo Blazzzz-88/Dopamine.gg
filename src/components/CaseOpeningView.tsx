@@ -51,6 +51,9 @@ interface CaseOpeningViewProps {
   onSellItemsFromReveal: (itemsToKeep: InventoryItem[], soldValue: number) => void;
 }
 
+export type OpenQuantity = 1 | 2 | 3 | 5 | 10;
+export const OPEN_QUANTITIES: readonly OpenQuantity[] = [1, 2, 3, 5, 10];
+
 const WINNING_INDEX = 42;
 const STRIP_LENGTH = 54;
 
@@ -65,7 +68,7 @@ export const CaseOpeningView: React.FC<CaseOpeningViewProps> = ({
   onSellItemsFromReveal,
 }) => {
   const { inspectWeapon } = useWeaponInspector();
-  const [quantity, setQuantity] = useState<1 | 2 | 3>(1);
+  const [quantity, setQuantity] = useState<OpenQuantity>(1);
   const [turboMode, setTurboMode] = useState(false);
   const [rarityFilter, setRarityFilter] = useState<'all' | RarityId>('all');
 
@@ -94,7 +97,7 @@ export const CaseOpeningView: React.FC<CaseOpeningViewProps> = ({
   const hasSpaceForQty = availableSlots >= quantity;
   const durationMs = turboMode ? 1550 : 4700;
 
-  const handleQuantityChange = (q: 1 | 2 | 3) => {
+  const handleQuantityChange = (q: OpenQuantity) => {
     if (isSpinning) return;
     soundEngine.playClick();
     setQuantity(q);
@@ -113,7 +116,7 @@ export const CaseOpeningView: React.FC<CaseOpeningViewProps> = ({
   };
 
   const startSpin = useCallback(
-    (qtyOverride?: 1 | 2 | 3) => {
+    (qtyOverride?: number) => {
       if (isSpinning) return;
       const qty = qtyOverride ?? quantity;
       const cost = crate.price * qty;
@@ -206,7 +209,7 @@ export const CaseOpeningView: React.FC<CaseOpeningViewProps> = ({
   };
 
   const handleReopenFromModal = () => {
-    const qty = (pendingReveal.length as 1 | 2 | 3) || quantity;
+    const qty = pendingReveal.length || quantity;
     setPendingReveal([]);
     setTimeout(() => startSpin(qty), 60);
   };
@@ -280,12 +283,12 @@ export const CaseOpeningView: React.FC<CaseOpeningViewProps> = ({
 
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center rounded-xl border border-accent-500/20 bg-surface-base p-1">
-              {([1, 2, 3] as const).map((q) => (
+              {OPEN_QUANTITIES.map((q) => (
                 <button
                   key={q}
                   disabled={isSpinning}
                   onClick={() => handleQuantityChange(q)}
-                  className={`rounded-lg px-3 py-1.5 font-mono-num text-xs font-bold transition ${
+                  className={`rounded-lg px-2.5 sm:px-3 py-1.5 font-mono-num text-xs font-bold transition ${
                     quantity === q
                       ? 'bg-accent-400 text-accent-950 shadow'
                       : 'text-accent-200/70 hover:text-accent-100'
@@ -315,18 +318,31 @@ export const CaseOpeningView: React.FC<CaseOpeningViewProps> = ({
           </div>
         </div>
 
-        <div className="relative z-10 mt-6 space-y-3">
+        <div
+          className={`relative z-10 mt-6 space-y-3 ${
+            reelJobs.length > 2
+              ? 'max-h-[560px] overflow-y-auto pr-1 sm:pr-2'
+              : ''
+          }`}
+        >
           {reelJobs.map((job, idx) => (
-            <RouletteReel
-              key={idx}
-              strip={job.strip}
-              winningIndex={job.winningIndex}
-              spinId={spinId}
-              isSpinning={isSpinning}
-              durationMs={durationMs}
-              jitterOffset={job.jitter}
-              onSpinComplete={handleOneReelDone}
-            />
+            <div key={idx} className="relative">
+              {reelJobs.length > 1 && (
+                <div className="pointer-events-none absolute left-3 top-2.5 z-40 rounded-md border border-accent-500/25 bg-surface-base/85 px-2 py-0.5 font-mono-num text-[10px] font-bold text-accent-300 shadow-sm backdrop-blur-xs">
+                  Caisse #{idx + 1}
+                </div>
+              )}
+              <RouletteReel
+                strip={job.strip}
+                winningIndex={job.winningIndex}
+                spinId={spinId}
+                isSpinning={isSpinning}
+                durationMs={durationMs}
+                jitterOffset={job.jitter}
+                muteSound={idx > 0}
+                onSpinComplete={handleOneReelDone}
+              />
+            </div>
           ))}
         </div>
 
