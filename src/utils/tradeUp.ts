@@ -9,6 +9,7 @@ import {
 import { randomFloat } from './rng';
 
 export const TRADE_UP_REQUIRED_COUNT = 5;
+export const TRADE_UP_LEGENDARY_REQUIRED_COUNT = 10;
 
 export const TRADE_UP_INPUT_RARITIES: RarityId[] = [
   'commune',
@@ -16,6 +17,15 @@ export const TRADE_UP_INPUT_RARITIES: RarityId[] = [
   'mythique',
   'legendaire',
 ];
+
+/**
+ * Returns the number of input skins required for a contract of the given rarity
+ * (10 for Légendaire -> Secret, 5 for all other eligible rarities).
+ */
+export function getRequiredContractCount(inputRarity: RarityId): number {
+  if (inputRarity === 'legendaire') return TRADE_UP_LEGENDARY_REQUIRED_COUNT;
+  return TRADE_UP_REQUIRED_COUNT;
+}
 
 export interface TradeUpCandidate {
   crate: CrateDefinition;
@@ -39,15 +49,19 @@ export function getNextRarity(rarity: RarityId): RarityId | null {
 }
 
 /**
- * Validates whether a selection of items forms a legal 5-for-1 trade-up contract.
+ * Validates whether a selection of items forms a legal trade-up contract
+ * (5 skins for Commune/Rare/Mythique, 10 skins for Légendaire -> Secret).
  */
 export function canExecuteContract(selectedItems: InventoryItem[]): boolean {
-  if (selectedItems.length !== TRADE_UP_REQUIRED_COUNT) return false;
-  const uniqueIds = new Set(selectedItems.map((it) => it.instanceId));
-  if (uniqueIds.size !== TRADE_UP_REQUIRED_COUNT) return false;
-
+  if (selectedItems.length === 0) return false;
   const baseRarity = selectedItems[0].rarity;
   if (!getNextRarity(baseRarity)) return false;
+
+  const requiredCount = getRequiredContractCount(baseRarity);
+  if (selectedItems.length !== requiredCount) return false;
+
+  const uniqueIds = new Set(selectedItems.map((it) => it.instanceId));
+  if (uniqueIds.size !== requiredCount) return false;
 
   if (!selectedItems.every((it) => !it.locked && it.rarity === baseRarity)) {
     return false;
@@ -218,7 +232,8 @@ export function buildDefaultRarityPreviewStrip(
 }
 
 /**
- * Auto-selects up to 5 unlocked items of `inputRarity`, prioritizing items from the same crate.
+ * Auto-selects up to the required count (5 or 10 for Légendaire) of unlocked items
+ * of `inputRarity`, prioritizing items from the same crate.
  */
 export function autoPickContractItemIds(
   unlockedItems: InventoryItem[],
@@ -226,6 +241,7 @@ export function autoPickContractItemIds(
   currentSelectedIds: string[],
   crateFilterId: string | 'all' = 'all'
 ): string[] {
+  const requiredCount = getRequiredContractCount(inputRarity);
   const eligible = unlockedItems.filter(
     (it) =>
       !it.locked &&
@@ -238,14 +254,14 @@ export function autoPickContractItemIds(
   const pickedSet = new Set<string>();
 
   for (const id of currentSelectedIds) {
-    if (pickedIds.length >= TRADE_UP_REQUIRED_COUNT) break;
+    if (pickedIds.length >= requiredCount) break;
     if (eligibleById.has(id) && !pickedSet.has(id)) {
       pickedIds.push(id);
       pickedSet.add(id);
     }
   }
 
-  if (pickedIds.length >= TRADE_UP_REQUIRED_COUNT) return pickedIds;
+  if (pickedIds.length >= requiredCount) return pickedIds;
 
   // Determine preferred crate (already picked crate or crate with most available items)
   let preferredCrateId: string | null =
@@ -272,7 +288,7 @@ export function autoPickContractItemIds(
   // First pass: fill from preferred crate
   if (preferredCrateId) {
     for (const item of eligible) {
-      if (pickedIds.length >= TRADE_UP_REQUIRED_COUNT) break;
+      if (pickedIds.length >= requiredCount) break;
       if (item.crateId === preferredCrateId && !pickedSet.has(item.instanceId)) {
         pickedIds.push(item.instanceId);
         pickedSet.add(item.instanceId);
@@ -283,7 +299,7 @@ export function autoPickContractItemIds(
   // Second pass: fill remaining slots from any crate if needed
   if (crateFilterId === 'all') {
     for (const item of eligible) {
-      if (pickedIds.length >= TRADE_UP_REQUIRED_COUNT) break;
+      if (pickedIds.length >= requiredCount) break;
       if (!pickedSet.has(item.instanceId)) {
         pickedIds.push(item.instanceId);
         pickedSet.add(item.instanceId);

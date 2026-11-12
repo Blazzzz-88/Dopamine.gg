@@ -41,6 +41,7 @@ export interface PersistedState {
   history: DropHistoryItem[];
   stats: PlayerStats;
   dailyChallenges: DailyChallengesState;
+  pendingUpgrade?: InventoryItem | null;
   soundEnabled: boolean;
   themeId: ThemeId;
 }
@@ -77,6 +78,7 @@ export function createInitialState(): PersistedState {
     history: [],
     stats: createDefaultStats(),
     dailyChallenges: createDailyChallengesState(),
+    pendingUpgrade: null,
     soundEnabled: true,
     themeId: DEFAULT_THEME,
   };
@@ -162,6 +164,7 @@ export function loadPersistedState(): PersistedState {
             }
           : createDefaultStats(),
         dailyChallenges: ensureTodayChallenges(parsed.dailyChallenges),
+        pendingUpgrade: parsed.pendingUpgrade ?? null,
         soundEnabled: typeof parsed.soundEnabled === 'boolean' ? parsed.soundEnabled : true,
         themeId: validTheme,
       };

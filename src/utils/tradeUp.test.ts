@@ -7,25 +7,34 @@ import {
   buildDefaultRarityPreviewStrip,
   canExecuteContract,
   getNextRarity,
+  getRequiredContractCount,
   getTradeUpCrateBreakdown,
   getTradeUpPool,
   rollTradeUpOutcome,
   TRADE_UP_INPUT_RARITIES,
+  TRADE_UP_LEGENDARY_REQUIRED_COUNT,
   TRADE_UP_REQUIRED_COUNT,
 } from './tradeUp';
 
 describe('Système de Contrat d’Échange (Trade-Up)', () => {
-  it('fait progresser chaque rareté sauf Secret', () => {
+  it('fait progresser chaque rareté sauf Secret et exige 10 Légendaires pour Secret', () => {
     expect(getNextRarity('commune')).toBe('rare');
     expect(getNextRarity('rare')).toBe('mythique');
     expect(getNextRarity('mythique')).toBe('legendaire');
     expect(getNextRarity('legendaire')).toBe('secret');
     expect(getNextRarity('secret')).toBeNull();
+
+    expect(getRequiredContractCount('commune')).toBe(5);
+    expect(getRequiredContractCount('rare')).toBe(5);
+    expect(getRequiredContractCount('mythique')).toBe(5);
+    expect(getRequiredContractCount('legendaire')).toBe(10);
+    expect(TRADE_UP_LEGENDARY_REQUIRED_COUNT).toBe(10);
   });
 
-  it('exige exactement 5 skins déverrouillés, uniques, de même rareté et non Secret', () => {
+  it('exige 5 skins (ou 10 Légendaires) déverrouillés, uniques, de même rareté et non Secret', () => {
     const crate = CRATES[0];
     const mythSkin = crate.skins.find((s) => s.rarity === 'mythique')!;
+    const legSkin = crate.skins.find((s) => s.rarity === 'legendaire')!;
     const rareSkin = crate.skins.find((s) => s.rarity === 'rare')!;
     const secretSkin = crate.skins.find((s) => s.rarity === 'secret')!;
 
@@ -34,6 +43,15 @@ describe('Système de Contrat d’Échange (Trade-Up)', () => {
       instanceId: `myth_${i}`,
     }));
     expect(canExecuteContract(fiveMythics)).toBe(true);
+
+    // 5 Légendaires ne suffisent plus (il en faut 10), 9 non plus, 10 oui
+    const tenLegendaries = Array.from({ length: 10 }, (_, i) => ({
+      ...createInventoryItem(crate, legSkin, 'ouverture'),
+      instanceId: `leg_${i}`,
+    }));
+    expect(canExecuteContract(tenLegendaries.slice(0, 5))).toBe(false);
+    expect(canExecuteContract(tenLegendaries.slice(0, 9))).toBe(false);
+    expect(canExecuteContract(tenLegendaries)).toBe(true);
 
     // Moins de 5 skins -> refusé
     expect(canExecuteContract(fiveMythics.slice(0, 4))).toBe(false);
@@ -65,12 +83,13 @@ describe('Système de Contrat d’Échange (Trade-Up)', () => {
     expect(canExecuteContract(fiveSecrets)).toBe(false);
   });
 
-  it('attribue 100% à la caisse unique pour 5 skins de la même caisse sur toutes les caisses et raretés éligibles', () => {
+  it('attribue 100% à la caisse unique pour le nombre requis de skins (5 ou 10 Légendaires) sur toutes les caisses et raretés éligibles', () => {
     for (const crate of CRATES) {
       for (const inputRarity of TRADE_UP_INPUT_RARITIES) {
         const nextRarity = getNextRarity(inputRarity)!;
+        const requiredCount = getRequiredContractCount(inputRarity);
         const inputSkin = crate.skins.find((s) => s.rarity === inputRarity)!;
-        const items = Array.from({ length: 5 }, (_, i) => ({
+        const items = Array.from({ length: requiredCount }, (_, i) => ({
           ...createInventoryItem(crate, inputSkin, 'ouverture'),
           instanceId: `${crate.id}_${inputRarity}_${i}`,
         }));
@@ -151,11 +170,12 @@ describe('Système de Contrat d’Échange (Trade-Up)', () => {
     expect(defaultPreview.every((s) => s.rarity === 'secret')).toBe(true);
   });
 
-  it('auto-sélectionne en priorité 5 skins de la même caisse', () => {
+  it('auto-sélectionne en priorité 5 skins (ou 10 Légendaires) de la même caisse', () => {
     const c1 = CRATES[0];
     const c2 = CRATES[1];
     const c1Commune = c1.skins.find((s) => s.rarity === 'commune')!;
     const c2Commune = c2.skins.find((s) => s.rarity === 'commune')!;
+    const c2Leg = c2.skins.find((s) => s.rarity === 'legendaire')!;
 
     const inventory = [
       ...Array.from({ length: 2 }, (_, i) => ({
@@ -166,10 +186,18 @@ describe('Système de Contrat d’Échange (Trade-Up)', () => {
         ...createInventoryItem(c2, c2Commune, 'ouverture'),
         instanceId: `c2_${i}`,
       })),
+      ...Array.from({ length: 10 }, (_, i) => ({
+        ...createInventoryItem(c2, c2Leg, 'ouverture'),
+        instanceId: `c2_leg_${i}`,
+      })),
     ];
 
     const picked = autoPickContractItemIds(inventory, 'commune', [], 'all');
     expect(picked).toHaveLength(5);
     expect(picked.every((id) => id.startsWith('c2_'))).toBe(true);
+
+    const pickedLeg = autoPickContractItemIds(inventory, 'legendaire', [], 'all');
+    expect(pickedLeg).toHaveLength(10);
+    expect(pickedLeg.every((id) => id.startsWith('c2_leg_'))).toBe(true);
   });
 });

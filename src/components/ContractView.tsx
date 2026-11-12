@@ -29,11 +29,11 @@ import {
   buildDefaultRarityPreviewStrip,
   canExecuteContract,
   getNextRarity,
+  getRequiredContractCount,
   getTradeUpCrateBreakdown,
   getTradeUpPool,
   rollTradeUpOutcome,
   TRADE_UP_INPUT_RARITIES,
-  TRADE_UP_REQUIRED_COUNT,
 } from '../utils/tradeUp';
 import { DropRevealModal } from './DropRevealModal';
 import { RouletteReel } from './RouletteReel';
@@ -106,7 +106,9 @@ export const ContractView: React.FC<ContractViewProps> = ({
       const found = unlockedEligibleItems.find((i) => i.instanceId === preselectedInstanceId);
       if (found) return found.rarity;
     }
-    const readyTier = TRADE_UP_INPUT_RARITIES.find((r) => countsByRarity[r] >= TRADE_UP_REQUIRED_COUNT);
+    const readyTier = TRADE_UP_INPUT_RARITIES.find(
+      (r) => countsByRarity[r] >= getRequiredContractCount(r)
+    );
     if (readyTier) return readyTier;
     const anyTier = TRADE_UP_INPUT_RARITIES.find((r) => countsByRarity[r] > 0);
     return anyTier ?? 'mythique';
@@ -199,6 +201,7 @@ export const ContractView: React.FC<ContractViewProps> = ({
   }, [selectedIds, unlockedOfActiveRarity]);
 
   const targetRarity = getNextRarity(activeRarity) ?? 'legendaire';
+  const requiredCount = getRequiredContractCount(activeRarity);
   const inputMeta = RARITIES[activeRarity];
   const targetMeta = RARITIES[targetRarity];
 
@@ -271,7 +274,7 @@ export const ContractView: React.FC<ContractViewProps> = ({
       if (prev.includes(instanceId)) {
         return prev.filter((id) => id !== instanceId);
       }
-      if (prev.length >= TRADE_UP_REQUIRED_COUNT) {
+      if (prev.length >= requiredCount) {
         return prev;
       }
       return [...prev, instanceId];
@@ -372,13 +375,14 @@ export const ContractView: React.FC<ContractViewProps> = ({
           <div>
             <div className="inline-flex items-center gap-2 rounded-full border border-accent-500/25 bg-accent-500/10 px-3 py-1 text-xs font-semibold text-accent-300">
               <ArrowLeftRight className="h-3.5 w-3.5" />
-              CONTRAT D’ÉCHANGE • 5 POUR 1
+              CONTRAT D’ÉCHANGE • {requiredCount} POUR 1
             </div>
             <h1 className="mt-2 font-display text-2xl font-bold text-accent-50 sm:text-3xl">
               Contrat d’Échange
             </h1>
             <p className="mt-1 max-w-2xl text-xs text-accent-100/65 sm:text-sm">
-              Échangez <strong className="text-accent-200">5 skins déverrouillés</strong> d’une même rareté contre{' '}
+              Échangez <strong className="text-accent-200">5 skins déverrouillés</strong> (ou{' '}
+              <strong className="text-accent-200">10 Légendaires</strong> pour un Secret) d’une même rareté contre{' '}
               <strong className="text-accent-200">1 skin aléatoire</strong> de la rareté supérieure issu des caisses
               correspondantes. Toutes les raretés sont éligibles, à l’exception de{' '}
               <span style={{ color: RARITIES.secret.color }} className="font-semibold">
@@ -393,6 +397,7 @@ export const ContractView: React.FC<ContractViewProps> = ({
               const fromMeta = RARITIES[rid];
               const nextId = getNextRarity(rid)!;
               const toMeta = RARITIES[nextId];
+              const tierRequired = getRequiredContractCount(rid);
               const count = countsByRarity[rid];
               const active = activeRarity === rid;
 
@@ -415,12 +420,12 @@ export const ContractView: React.FC<ContractViewProps> = ({
                   <span style={{ color: toMeta.color }}>{toMeta.label}</span>
                   <span
                     className={`ml-0.5 rounded-md px-1.5 py-0.5 font-mono-num text-[10px] ${
-                      count >= TRADE_UP_REQUIRED_COUNT
+                      count >= tierRequired
                         ? 'bg-emerald-500/20 text-emerald-300'
                         : 'bg-white/10 text-accent-200/75'
                     }`}
                   >
-                    {count}
+                    {count}/{tierRequired}
                   </span>
                 </button>
               );
@@ -466,7 +471,7 @@ export const ContractView: React.FC<ContractViewProps> = ({
               </div>
             ) : (
               <span className="text-xs text-accent-200/60">
-                Sélectionnez {TRADE_UP_REQUIRED_COUNT} skins{' '}
+                Sélectionnez {requiredCount} skins{' '}
                 <strong style={{ color: inputMeta.color }}>{inputMeta.label}</strong> pour cibler leur(s) caisse(s)
               </span>
             )}
@@ -538,7 +543,7 @@ export const ContractView: React.FC<ContractViewProps> = ({
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="font-display text-sm font-bold uppercase tracking-wider text-accent-300">
-                1. Sélectionnez 5 skins{' '}
+                1. Sélectionnez {requiredCount} skins{' '}
                 <span style={{ color: inputMeta.color }}>{inputMeta.label}</span> (
                 {unlockedOfActiveRarity.length} disponible
                 {unlockedOfActiveRarity.length > 1 ? 's' : ''})
@@ -576,13 +581,13 @@ export const ContractView: React.FC<ContractViewProps> = ({
                 disabled={
                   isSpinning ||
                   filteredCandidates.length === 0 ||
-                  selectedItems.length >= TRADE_UP_REQUIRED_COUNT
+                  selectedItems.length >= requiredCount
                 }
                 onClick={handleAutoFill}
                 className="inline-flex items-center gap-1.5 rounded-xl border border-accent-400/35 bg-accent-500/15 px-3 py-1.5 text-xs font-bold text-accent-200 transition hover:bg-accent-500/25 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <Wand2 className="h-3.5 w-3.5" />
-                Auto-remplir (5)
+                Auto-remplir ({requiredCount})
               </button>
 
               {selectedIds.length > 0 && (
@@ -623,7 +628,7 @@ export const ContractView: React.FC<ContractViewProps> = ({
               {filteredCandidates.map((item) => {
                 const slotIndex = selectedIds.indexOf(item.instanceId);
                 const isSelected = slotIndex !== -1;
-                const isFull = selectedIds.length >= TRADE_UP_REQUIRED_COUNT;
+                const isFull = selectedIds.length >= requiredCount;
                 const disabled = isSpinning || (!isSelected && isFull);
                 const isEquipped =
                   item.instanceId === equippedWeaponId || item.instanceId === equippedKnifeId;
@@ -700,7 +705,7 @@ export const ContractView: React.FC<ContractViewProps> = ({
           <div>
             <div className="mb-3 flex items-center justify-between">
               <h2 className="font-display text-sm font-bold uppercase tracking-wider text-accent-300">
-                2. Emplacements du contrat ({selectedItems.length}/{TRADE_UP_REQUIRED_COUNT})
+                2. Emplacements du contrat ({selectedItems.length}/{requiredCount})
               </h2>
               <span
                 className="rounded-md px-2 py-0.5 text-[10px] font-bold uppercase"
@@ -710,8 +715,8 @@ export const ContractView: React.FC<ContractViewProps> = ({
               </span>
             </div>
 
-            <div className="space-y-2">
-              {Array.from({ length: TRADE_UP_REQUIRED_COUNT }, (_, idx) => {
+            <div className={`space-y-2 ${requiredCount > 5 ? 'max-h-[380px] overflow-y-auto pr-1' : ''}`}>
+              {Array.from({ length: requiredCount }, (_, idx) => {
                 const item = selectedItems[idx];
                 if (!item) {
                   return (
@@ -796,9 +801,9 @@ export const ContractView: React.FC<ContractViewProps> = ({
                 {isSpinning
                   ? 'Échange en cours...'
                   : contractReady
-                  ? `Signer le Contrat (5 ${inputMeta.label} → 1 ${targetMeta.label})`
-                  : `Sélectionnez encore ${TRADE_UP_REQUIRED_COUNT - selectedItems.length} skin${
-                      TRADE_UP_REQUIRED_COUNT - selectedItems.length > 1 ? 's' : ''
+                  ? `Signer le Contrat (${requiredCount} ${inputMeta.label} → 1 ${targetMeta.label})`
+                  : `Sélectionnez encore ${requiredCount - selectedItems.length} skin${
+                      requiredCount - selectedItems.length > 1 ? 's' : ''
                     }`}
               </span>
             </button>

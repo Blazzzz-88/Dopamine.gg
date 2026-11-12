@@ -24,7 +24,29 @@ interface UpgraderViewProps {
   onConsumeItem: (instanceId: string) => void;
   onWinUpgrade: (newItem: InventoryItem) => void;
   onRecordAttempt: (won: boolean) => void;
+  onStartUpgrade?: (sourceInstanceId: string, won: boolean, wonItem: InventoryItem | null) => void;
+  onResolvePendingUpgrade?: () => void;
   onGoToShop: () => void;
+}
+
+interface SpinSnapshot {
+  sourceItem: InventoryItem;
+  targetEntry: TargetEntry;
+  candidateTargets: TargetEntry[];
+  winChance: number;
+}
+
+interface ActiveSpinState {
+  startTime: number;
+  duration: number;
+  startDeg: number;
+  nextDeg: number;
+  won: boolean;
+  rollPct: number;
+  winChance: number;
+  targetEntry: TargetEntry;
+  created: InventoryItem | null;
+  finished: boolean;
 }
 
 export const UpgraderView: React.FC<UpgraderViewProps> = ({
@@ -33,6 +55,8 @@ export const UpgraderView: React.FC<UpgraderViewProps> = ({
   onConsumeItem,
   onWinUpgrade,
   onRecordAttempt,
+  onStartUpgrade,
+  onResolvePendingUpgrade,
   onGoToShop,
 }) => {
   const { inspectWeapon } = useWeaponInspector();
@@ -41,11 +65,15 @@ export const UpgraderView: React.FC<UpgraderViewProps> = ({
     [inventory]
   );
 
+  const [isSpinning, setIsSpinning] = useState(false);
+  const [spinningSnapshot, setSpinningSnapshot] = useState<SpinSnapshot | null>(null);
+
   const [selectedSourceId, setSelectedSourceId] = useState<string | null>(
     preselectedInstanceId ?? unlockedItems[0]?.instanceId ?? null
   );
 
   useEffect(() => {
+    if (isSpinning) return;
     if (preselectedInstanceId && unlockedItems.some((i) => i.instanceId === preselectedInstanceId)) {
       setSelectedSourceId(preselectedInstanceId);
     } else if (
@@ -54,7 +82,7 @@ export const UpgraderView: React.FC<UpgraderViewProps> = ({
     ) {
       setSelectedSourceId(unlockedItems[0].instanceId);
     }
-  }, [preselectedInstanceId, unlockedItems, selectedSourceId]);
+  }, [preselectedInstanceId, unlockedItems, selectedSourceId, isSpinning]);
 
   const sourceItem = unlockedItems.find((i) => i.instanceId === selectedSourceId) ?? null;
 
@@ -79,13 +107,14 @@ export const UpgraderView: React.FC<UpgraderViewProps> = ({
   );
 
   useEffect(() => {
+    if (isSpinning) return;
     if (
       candidateTargets.length > 0 &&
       !candidateTargets.some((t) => t.skin.id === selectedTargetSkinId)
     ) {
       setSelectedTargetSkinId(candidateTargets[Math.min(2, candidateTargets.length - 1)].skin.id);
     }
-  }, [candidateTargets, selectedTargetSkinId]);
+  }, [candidateTargets, selectedTargetSkinId, isSpinning]);
 
   const targetEntry =
     candidateTargets.find((t) => t.skin.id === selectedTargetSkinId) ??
@@ -98,22 +127,106 @@ export const UpgraderView: React.FC<UpgraderViewProps> = ({
     return Number(Math.min(78, Math.max(1.0, raw)).toFixed(2));
   }, [sourceItem, targetEntry]);
 
-  const [isSpinning, setIsSpinning] = useState(false);
   const [needleDeg, setNeedleDeg] = useState(0);
   const [resultBanner, setResultBanner] = useState<{
     won: boolean;
     message: string;
   } | null>(null);
   const currentDegRef = useRef(0);
+  const animRafRef = useRef<number>(0);
+  const animTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeSpinRef = useRef<ActiveSpinState | null>(null);
+
+  const callbacksRef = useRef({
+    onWinUpgrade,
+    onResolvePendingUpgrade,
+  });
+  callbacksRef.current = {
+    onWinUpgrade,
+    onResolvePendingUpgrade,
+  };
+
+  const finishSpin = () => {
+    const spin = activeSpinRef.current;
+    if (!spin || spin.finished) return;
+    spin.finished = true;
+    activeSpinRef.current = null;
+
+    if (animRafRef.current) {
+      cancelAnimationFrame(animRafRef.current);
+      animRafRef.current = 0;
+    }
+    if (animTimeoutRef.current) {
+      clearTimeout(animTimeoutRef.current);
+      animTimeoutRef.current = null;
+    }
+
+    currentDegRef.current = spin.nextDeg;
+    setNeedleDeg(spin.nextDeg);
+    setIsSpinning(false);
+    setSpinningSnapshot(null);
+
+    if (spin.won && spin.created) {
+      if (callbacksRef.current.onResolvePendingUpgrade) {
+        callbacksRef.current.onResolvePendingUpgrade();
+      } else {
+        callbacksRef.current.onWinUpgrade(spin.created);
+      }
+      soundEngine.playReveal(spin.targetEntry.skin.rarity);
+      setResultBanner({
+        won: true,
+        message: `Succès ! Vous obtenez ${spin.created.weaponName} | ${spin.created.name} (${formatCredits(spin.created.value)})`,
+      });
+    } else {
+      soundEngine.playFail();
+      setResultBanner({
+        won: false,
+        message: `Échec de l’upgrade (${spin.rollPct.toFixed(1)}% vs ${spin.winChance}% requis).`,
+      });
+    }
+  };
+
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.hidden) return;
+      const spin = activeSpinRef.current;
+      if (!spin || spin.finished) return;
+
+      const elapsed = Math.max(0, Date.now() - spin.startTime);
+      const t = Math.min(1, elapsed / spin.duration);
+      if (t >= 1) {
+        finishSpin();
+      } else {
+        const eased = 1 - Math.pow(1 - t, 3.8);
+        const deg = spin.startDeg + (spin.nextDeg - spin.startDeg) * eased;
+        currentDegRef.current = deg;
+        setNeedleDeg(deg);
+      }
+    };
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      if (animRafRef.current) {
+        cancelAnimationFrame(animRafRef.current);
+        animRafRef.current = 0;
+      }
+      if (animTimeoutRef.current) {
+        clearTimeout(animTimeoutRef.current);
+        animTimeoutRef.current = null;
+      }
+      activeSpinRef.current = null;
+    };
+  }, []);
 
   const handleAttemptUpgrade = () => {
-    if (isSpinning || !sourceItem || !targetEntry) return;
-    setIsSpinning(true);
-    setResultBanner(null);
-    soundEngine.playOpenStart();
+    if (isSpinning || activeSpinRef.current || !sourceItem || !targetEntry) return;
 
     const rollPct = randomFloat() * 100;
     const won = rollPct < winChance;
+    const created = won
+      ? createInventoryItem(targetEntry.crate, targetEntry.skin, 'upgrade')
+      : null;
 
     const arcAngle = (winChance / 100) * 360;
     let landingAngleOnCircle = 0;
@@ -133,54 +246,86 @@ export const UpgraderView: React.FC<UpgraderViewProps> = ({
     const nextDeg = currentDegRef.current + baseTurns + deltaToTarget;
 
     const startDeg = currentDegRef.current;
-    const startTime = performance.now();
+    const startTime = Date.now();
     const duration = 3400;
     let lastTickStep = -1;
 
-    const animate = (now: number) => {
-      const t = Math.min(1, (now - startTime) / duration);
+    setSpinningSnapshot({
+      sourceItem,
+      targetEntry,
+      candidateTargets,
+      winChance,
+    });
+    setIsSpinning(true);
+    setResultBanner(null);
+    soundEngine.playOpenStart();
+
+    // Consommer le skin et enregistrer la tentative dès le lancement (empêche le reset via Alt+Tab / changement d'onglet / F5)
+    if (onStartUpgrade) {
+      onStartUpgrade(sourceItem.instanceId, won, created);
+    } else {
+      onConsumeItem(sourceItem.instanceId);
+      onRecordAttempt(won);
+    }
+
+    activeSpinRef.current = {
+      startTime,
+      duration,
+      startDeg,
+      nextDeg,
+      won,
+      rollPct,
+      winChance,
+      targetEntry,
+      created,
+      finished: false,
+    };
+
+    const animate = () => {
+      const spin = activeSpinRef.current;
+      if (!spin || spin.finished) return;
+
+      const t = Math.min(1, Math.max(0, (Date.now() - spin.startTime) / spin.duration));
       const eased = 1 - Math.pow(1 - t, 3.8);
-      const deg = startDeg + (nextDeg - startDeg) * eased;
+      const deg = spin.startDeg + (spin.nextDeg - spin.startDeg) * eased;
       currentDegRef.current = deg;
       setNeedleDeg(deg);
 
       const step = Math.floor(deg / 24);
       if (step !== lastTickStep) {
-        if (lastTickStep !== -1) soundEngine.playTick(1 - t * 0.5);
+        if (lastTickStep !== -1 && !document.hidden) soundEngine.playTick(1 - t * 0.5);
         lastTickStep = step;
       }
 
       if (t < 1) {
-        requestAnimationFrame(animate);
+        animRafRef.current = requestAnimationFrame(animate);
       } else {
-        setIsSpinning(false);
-        onConsumeItem(sourceItem.instanceId);
-        onRecordAttempt(won);
-
-        if (won) {
-          const created = createInventoryItem(targetEntry.crate, targetEntry.skin, 'upgrade');
-          onWinUpgrade(created);
-          soundEngine.playReveal(targetEntry.skin.rarity);
-          setResultBanner({
-            won: true,
-            message: `Succès ! Vous obtenez ${created.weaponName} | ${created.name} (${formatCredits(created.value)})`,
-          });
-        } else {
-          soundEngine.playFail();
-          setResultBanner({
-            won: false,
-            message: `Échec de l’upgrade (${rollPct.toFixed(1)}% vs ${winChance}% requis).`,
-          });
-        }
+        finishSpin();
       }
     };
 
-    requestAnimationFrame(animate);
+    animTimeoutRef.current = setTimeout(finishSpin, duration + 60);
+    animRafRef.current = requestAnimationFrame(animate);
   };
+
+  const displaySourceItem = spinningSnapshot?.sourceItem ?? sourceItem;
+  const displayTargetEntry = spinningSnapshot?.targetEntry ?? targetEntry;
+  const displayCandidateTargets = spinningSnapshot?.candidateTargets ?? candidateTargets;
+  const displayWinChance = spinningSnapshot?.winChance ?? winChance;
+
+  const displayedSourceItems = useMemo(() => {
+    if (
+      spinningSnapshot &&
+      !unlockedItems.some((i) => i.instanceId === spinningSnapshot.sourceItem.instanceId)
+    ) {
+      return [spinningSnapshot.sourceItem, ...unlockedItems];
+    }
+    return unlockedItems;
+  }, [spinningSnapshot, unlockedItems]);
 
   const radius = 92;
   const circumference = 2 * Math.PI * radius;
-  const winStrokeDash = (winChance / 100) * circumference;
+  const winStrokeDash = (displayWinChance / 100) * circumference;
 
   return (
     <motion.div
@@ -201,7 +346,7 @@ export const UpgraderView: React.FC<UpgraderViewProps> = ({
         </p>
       </section>
 
-      {unlockedItems.length === 0 ? (
+      {unlockedItems.length === 0 && !isSpinning ? (
         <div className="vault-card rounded-3xl p-12 text-center">
           {resultBanner && (
             <div
@@ -233,12 +378,12 @@ export const UpgraderView: React.FC<UpgraderViewProps> = ({
         <div className="grid gap-6 lg:grid-cols-12">
           <div className="vault-card rounded-2xl p-4 lg:col-span-4">
             <h3 className="mb-3 font-display text-sm font-bold uppercase tracking-wider text-accent-300">
-              1. Skin à miser ({unlockedItems.length})
+              1. Skin à miser ({displayedSourceItems.length})
             </h3>
             <div className="max-h-96 space-y-2 overflow-y-auto pr-1">
-              {unlockedItems.map((item) => {
+              {displayedSourceItems.map((item) => {
                 const r = RARITIES[item.rarity];
-                const active = sourceItem?.instanceId === item.instanceId;
+                const active = displaySourceItem?.instanceId === item.instanceId;
                 return (
                   <button
                     key={item.instanceId}
@@ -276,7 +421,7 @@ export const UpgraderView: React.FC<UpgraderViewProps> = ({
                 Probabilité de succès
               </span>
               <div className="font-mono-num text-3xl font-extrabold text-accent-300">
-                {winChance.toFixed(2)}%
+                {displayWinChance.toFixed(2)}%
               </div>
             </div>
 
@@ -310,21 +455,21 @@ export const UpgraderView: React.FC<UpgraderViewProps> = ({
                 <div className="mt-1 h-7 w-2 rounded-full bg-white shadow-[0_0_14px_#fff]" />
               </div>
 
-              {targetEntry && (
+              {displayTargetEntry && (
                 <div className="group absolute inset-8 flex flex-col items-center justify-center rounded-full border border-accent-500/20 bg-surface-base/90 p-3 text-center">
                   <WeaponSilhouette
-                    weaponClass={targetEntry.skin.weaponClass}
-                    accentColor={RARITIES[targetEntry.skin.rarity].color}
-                    image={targetEntry.skin.image}
-                    alt={`${targetEntry.skin.weaponName} ${targetEntry.skin.name}`}
+                    weaponClass={displayTargetEntry.skin.weaponClass}
+                    accentColor={RARITIES[displayTargetEntry.skin.rarity].color}
+                    image={displayTargetEntry.skin.image}
+                    alt={`${displayTargetEntry.skin.weaponName} ${displayTargetEntry.skin.name}`}
                     size="sm"
-                    onInspect={() => inspectWeapon(targetEntry.skin)}
+                    onInspect={() => inspectWeapon(displayTargetEntry.skin)}
                   />
                   <div className="mt-1 line-clamp-1 text-[11px] font-bold text-accent-50">
-                    {targetEntry.skin.name}
+                    {displayTargetEntry.skin.name}
                   </div>
                   <div className="font-mono-num text-xs font-bold text-accent-300">
-                    ~{formatCredits(targetEntry.skin.baseValue)}
+                    ~{formatCredits(displayTargetEntry.skin.baseValue)}
                   </div>
                 </div>
               )}
@@ -348,7 +493,7 @@ export const UpgraderView: React.FC<UpgraderViewProps> = ({
             )}
 
             <button
-              disabled={isSpinning || !sourceItem || !targetEntry}
+              disabled={isSpinning || !displaySourceItem || !displayTargetEntry}
               onClick={handleAttemptUpgrade}
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-accent-400 to-accent2-300 py-3.5 text-sm font-extrabold text-accent-950 shadow-[0_0_24px_var(--card-glow)] transition hover:brightness-105 disabled:opacity-50"
             >
@@ -361,17 +506,17 @@ export const UpgraderView: React.FC<UpgraderViewProps> = ({
             <h3 className="mb-3 font-display text-sm font-bold uppercase tracking-wider text-accent-300">
               2. Cible souhaitée
             </h3>
-            {candidateTargets.length === 0 ? (
+            {displayCandidateTargets.length === 0 ? (
               <p className="text-xs text-accent-100/60">
                 Ce skin est déjà proche du sommet de valeur du catalogue !
               </p>
             ) : (
               <div className="max-h-96 space-y-2 overflow-y-auto pr-1">
-                {candidateTargets.map(({ skin, crate }) => {
+                {displayCandidateTargets.map(({ skin, crate }) => {
                   const r = RARITIES[skin.rarity];
-                  const active = targetEntry?.skin.id === skin.id;
-                  const mult = sourceItem
-                    ? (skin.baseValue / sourceItem.value).toFixed(1)
+                  const active = displayTargetEntry?.skin.id === skin.id;
+                  const mult = displaySourceItem
+                    ? (skin.baseValue / displaySourceItem.value).toFixed(1)
                     : '1.0';
                   return (
                     <button

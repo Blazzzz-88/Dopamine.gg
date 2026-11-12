@@ -126,7 +126,7 @@ export const StatsAndGuideView: React.FC<StatsAndGuideViewProps> = ({
               icon: Sparkles,
               title: '3. Upgrader & Contrats',
               delay: 440,
-              desc: 'Risquez un skin sur l’Upgrader ou échangez 5 skins d’une même rareté (hors Secret) via un Contrat contre 1 skin de palier supérieur.',
+              desc: 'Risquez un skin sur l’Upgrader ou échangez 5 skins (10 Légendaires pour un Secret) d’une même rareté via un Contrat contre 1 skin de palier supérieur.',
             },
             {
               icon: Crosshair,

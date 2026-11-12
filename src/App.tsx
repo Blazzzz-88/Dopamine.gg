@@ -105,6 +105,8 @@ export function App() {
   const [challengesModalOpen, setChallengesModalOpen] = useState(false);
   const pageModeRef = useRef(pageMode);
   pageModeRef.current = pageMode;
+  const loadedCloudUserIdRef = useRef<string | null>(null);
+  const resolvingUpgradeIdRef = useRef<string | null>(null);
 
   // Charger la session Supabase et écouter les changements
   const loadCloudProfile = useCallback(async (user: SupabaseUser) => {
@@ -140,15 +142,23 @@ export function App() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       const user = session?.user ?? null;
       setCurrentUser(user);
-      if (user) loadCloudProfile(user);
+      if (user && loadedCloudUserIdRef.current !== user.id) {
+        loadedCloudUserIdRef.current = user.id;
+        loadCloudProfile(user);
+      }
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       const user = session?.user ?? null;
       setCurrentUser(user);
       if (user) {
-        loadCloudProfile(user);
+        // Ignore les événements focus/Alt+Tab/TOKEN_REFRESHED pour un utilisateur déjà chargé
+        if (loadedCloudUserIdRef.current !== user.id && event !== 'TOKEN_REFRESHED') {
+          loadedCloudUserIdRef.current = user.id;
+          loadCloudProfile(user);
+        }
       } else {
+        loadedCloudUserIdRef.current = null;
         setCurrentUsername(null);
       }
     });
@@ -487,6 +497,86 @@ export function App() {
     }));
   }, []);
 
+  const handleStartUpgrade = useCallback(
+    (sourceInstanceId: string, won: boolean, wonItem: InventoryItem | null) => {
+      setPersisted((prev) => {
+        const exists = prev.inventory.some(
+          (i) => i.instanceId === sourceInstanceId && !i.locked
+        );
+        if (!exists) return prev;
+        return {
+          ...prev,
+          inventory: prev.inventory.filter((i) => i.instanceId !== sourceInstanceId),
+          ...clearRemovedEquips(prev, new Set([sourceInstanceId])),
+          pendingUpgrade: won && wonItem ? wonItem : null,
+          stats: {
+            ...prev.stats,
+            upgradesAttempted: prev.stats.upgradesAttempted + 1,
+            upgradesWon: prev.stats.upgradesWon + (won ? 1 : 0),
+          },
+        };
+      });
+    },
+    []
+  );
+
+  const handleResolvePendingUpgrade = useCallback(() => {
+    const reward = persisted.pendingUpgrade;
+    if (!reward || resolvingUpgradeIdRef.current === reward.instanceId) return;
+    resolvingUpgradeIdRef.current = reward.instanceId;
+
+    const dropEntry: DropHistoryItem = {
+      id: randomId('updrop'),
+      playerName: 'VOUS',
+      isPlayer: true,
+      crateName: `Upgrade • ${reward.crateName}`,
+      skinName: reward.name,
+      weaponName: reward.weaponName,
+      weaponClass: reward.weaponClass,
+      rarity: reward.rarity,
+      value: reward.value,
+      timestamp: reward.obtainedAt,
+      seedHash: generateSeedHash(),
+    };
+    setTickerDrops((prev) => [dropEntry, ...prev.slice(0, 17)]);
+
+    setPersisted((prev) => {
+      if (!prev.pendingUpgrade || prev.pendingUpgrade.instanceId !== reward.instanceId) {
+        return prev;
+      }
+      const item = prev.pendingUpgrade;
+      const alreadyInInv = prev.inventory.some((i) => i.instanceId === item.instanceId);
+      return {
+        ...prev,
+        pendingUpgrade: null,
+        inventory: alreadyInInv ? prev.inventory : [item, ...prev.inventory],
+        history: [dropEntry, ...prev.history.slice(0, 60)],
+        stats: {
+          ...prev.stats,
+          totalWonValue: prev.stats.totalWonValue + item.value,
+          bestDropValue: Math.max(prev.stats.bestDropValue, item.value),
+          bestDropName:
+            item.value > prev.stats.bestDropValue
+              ? `${item.weaponName} | ${item.name} (${RARITIES[item.rarity].label})`
+              : prev.stats.bestDropName,
+        },
+      };
+    });
+    pushToast(`Upgrade réussi : ${reward.weaponName} | ${reward.name} !`);
+  }, [persisted.pendingUpgrade, pushToast]);
+
+  // Si l'utilisateur quitte l'onglet Upgrader ou recharge la page pendant l'animation d'un upgrade gagné,
+  // on livre automatiquement le gain en attente sans jamais restaurer le skin déjà consommé.
+  useEffect(() => {
+    if (!persisted.pendingUpgrade) {
+      resolvingUpgradeIdRef.current = null;
+      return;
+    }
+    if (activeTab !== 'upgrader' || pageMode !== 'casino') {
+      handleResolvePendingUpgrade();
+    }
+  }, [persisted.pendingUpgrade, activeTab, pageMode, handleResolvePendingUpgrade]);
+
   const handleEquipInventoryItem = useCallback(
     (instanceId: string) => {
       const target = persisted.inventory.find((i) => i.instanceId === instanceId);
@@ -649,6 +739,7 @@ export function App() {
     soundEngine.playClick();
     setUpgraderSeedId(null);
     setContractSeedId(null);
+    resolvingUpgradeIdRef.current = null;
     setTickerDrops(Array.from({ length: 10 }, () => generateSimulatedDrop()));
     setPersisted((prev) => ({
       ...createInitialState(),
@@ -809,6 +900,8 @@ export function App() {
                   onConsumeItem={handleConsumeUpgraderItem}
                   onWinUpgrade={handleWinUpgrade}
                   onRecordAttempt={handleRecordUpgradeAttempt}
+                  onStartUpgrade={handleStartUpgrade}
+                  onResolvePendingUpgrade={handleResolvePendingUpgrade}
                   onGoToShop={() => handleTabChange('boutique')}
                 />
               </motion.div>

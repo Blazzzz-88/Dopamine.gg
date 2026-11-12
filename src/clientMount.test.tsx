@@ -507,6 +507,20 @@ describe('Client mount smoke test (jsdom + StrictMode)', () => {
     expect(expectedLegendaryNames).toContain(won?.name);
     expect(finalState.inventory.some((it) => it.instanceId === 'secret_keep')).toBe(true);
 
+    // Vérifie que l'onglet Légendaire → Secret exige désormais 10 skins Légendaires
+    const legTabBtn = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent?.includes('Légendaire') && b.textContent?.includes('Secret')
+    ) as HTMLButtonElement | undefined;
+    expect(legTabBtn).toBeDefined();
+    await act(async () => {
+      legTabBtn?.click();
+    });
+    await new Promise((r) => setTimeout(r, 60));
+
+    expect(container.innerHTML).toContain('Auto-remplir (10)');
+    expect(container.innerHTML).toContain('2. Emplacements du contrat (0/10)');
+    expect(container.innerHTML).toContain('Emplacement #10');
+
     await act(async () => {
       root.unmount();
     });
@@ -578,6 +592,98 @@ describe('Client mount smoke test (jsdom + StrictMode)', () => {
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));
     });
     await new Promise((r) => setTimeout(r, 60));
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it('consomme immédiatement le skin dès le clic sur Upgrader même en cas d’Alt+Tab ou changement d’onglet pendant la rotation', async () => {
+    localStorage.clear();
+    const crate = CRATES[0];
+    const sourceSkin = crate.skins.find((s) => s.rarity === 'commune')!;
+    const sourceItem = {
+      ...createInventoryItem(crate, sourceSkin, 'ouverture'),
+      instanceId: 'upg_stake_1',
+    };
+
+    savePersistedState({
+      ...createInitialState(),
+      inventory: [sourceItem],
+    });
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <StrictMode>
+          <App />
+        </StrictMode>
+      );
+    });
+    await new Promise((r) => setTimeout(r, 80));
+
+    const upgraderNavBtn = Array.from(container.querySelectorAll('header nav button')).find((b) =>
+      b.textContent?.includes('Upgrader')
+    ) as HTMLButtonElement | undefined;
+    expect(upgraderNavBtn).toBeDefined();
+
+    await act(async () => {
+      upgraderNavBtn?.click();
+    });
+    for (let t = 0; t < 20; t++) {
+      if (container.innerHTML.includes('Upgrader Orbital')) break;
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 40));
+      });
+    }
+
+    const attemptBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Tenter l’Upgrade')
+    ) as HTMLButtonElement | undefined;
+    expect(attemptBtn).toBeDefined();
+    expect(attemptBtn?.disabled).toBe(false);
+
+    await act(async () => {
+      attemptBtn?.click();
+    });
+
+    // Dès le lancement, le skin misé est consommé et la tentative est enregistrée (impossible de reset)
+    const immediateState = loadPersistedState();
+    expect(immediateState.stats.upgradesAttempted).toBe(1);
+    expect(immediateState.inventory.some((i) => i.instanceId === 'upg_stake_1')).toBe(false);
+
+    // Simule un Alt+Tab (document caché puis visible) pendant la rotation
+    await act(async () => {
+      Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+      await new Promise((r) => setTimeout(r, 120));
+      Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    // L'animation doit continuer (pas de reset ni retour du skin misé)
+    const afterAltTabState = loadPersistedState();
+    expect(afterAltTabState.stats.upgradesAttempted).toBe(1);
+    expect(afterAltTabState.inventory.some((i) => i.instanceId === 'upg_stake_1')).toBe(false);
+
+    // Simule également un changement d'onglet vers Inventaire en pleine rotation
+    const invNavBtn = Array.from(container.querySelectorAll('header nav button')).find((b) =>
+      b.textContent?.includes('Inventaire')
+    ) as HTMLButtonElement | undefined;
+    await act(async () => {
+      invNavBtn?.click();
+    });
+    await new Promise((r) => setTimeout(r, 220));
+
+    const afterTabSwitchState = loadPersistedState();
+    expect(afterTabSwitchState.stats.upgradesAttempted).toBe(1);
+    expect(afterTabSwitchState.pendingUpgrade).toBeNull();
+    expect(afterTabSwitchState.inventory.some((i) => i.instanceId === 'upg_stake_1')).toBe(false);
+    expect(afterTabSwitchState.inventory.length).toBe(afterTabSwitchState.stats.upgradesWon);
 
     await act(async () => {
       root.unmount();
