@@ -1,0 +1,1499 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Preview Ultra-Detail — Bras & Mains FPS Style Valorant</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #090d14;
+    color: #e2e8f0;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    overflow: hidden;
+    height: 100vh;
+    user-select: none;
+  }
+  #hud-top {
+    position: fixed;
+    top: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
+    text-align: center;
+    pointer-events: none;
+    background: rgba(9, 13, 20, 0.78);
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    padding: 8px 18px;
+    border-radius: 12px;
+    backdrop-filter: blur(10px);
+  }
+  #hud-top h1 {
+    font-size: 15px;
+    font-weight: 700;
+    color: #f8fafc;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+  }
+  #hud-top p {
+    font-size: 11px;
+    color: #94a3b8;
+    margin-top: 2px;
+  }
+  #controls-bar {
+    position: fixed;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    max-width: 96vw;
+    padding: 8px 12px;
+    background: rgba(9, 13, 20, 0.82);
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: 14px;
+    backdrop-filter: blur(12px);
+  }
+  .sep {
+    width: 1px;
+    background: rgba(148, 163, 184, 0.22);
+    margin: 2px 4px;
+  }
+  .btn {
+    background: rgba(30, 41, 59, 0.85);
+    border: 1px solid rgba(148, 163, 184, 0.24);
+    color: #cbd5e1;
+    padding: 7px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    transition: all 0.18s ease;
+  }
+  .btn:hover {
+    background: rgba(51, 65, 85, 0.9);
+    border-color: rgba(167, 139, 250, 0.65);
+    color: #fff;
+  }
+  .btn.active {
+    background: rgba(124, 58, 237, 0.30);
+    border-color: #a78bfa;
+    box-shadow: 0 0 12px rgba(139, 92, 246, 0.35);
+    color: #fff;
+  }
+  .btn.cam-btn.active {
+    background: rgba(56, 189, 248, 0.24);
+    border-color: #38bdf8;
+    box-shadow: 0 0 10px rgba(56, 189, 248, 0.28);
+  }
+  #canvas-container { width: 100%; height: 100%; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<div id="hud-top">
+  <h1>FPS ARMS — VALORANT TACTICAL SCULPT</h1>
+  <p>Clic + Drag pour tourner • Scroll pour zoomer • Inspecte les plis, phalanges, coutures & plaques</p>
+</div>
+
+<div id="controls-bar">
+  <button class="btn active" data-pose="karambit">Karambit (FPS)</button>
+  <button class="btn" data-pose="couteau">Couteau</button>
+  <button class="btn" data-pose="ar15">Fusil</button>
+  <button class="btn" data-pose="pistolet">Pistolet</button>
+  <button class="btn" data-pose="inspect">Inspection Mains</button>
+  <div class="sep"></div>
+  <button class="btn cam-btn active" data-cam="fps">Vue FPS</button>
+  <button class="btn cam-btn" data-cam="closeup">Zoom Main</button>
+  <button class="btn cam-btn" data-cam="side">Profil 3/4</button>
+  <div class="sep"></div>
+  <button class="btn cam-btn active" data-theme="omen">Omen Tactical</button>
+  <button class="btn cam-btn" data-theme="specops">Spec-Ops Slate</button>
+</div>
+
+<div id="canvas-container"></div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.168.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.168.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const container = document.getElementById('canvas-container');
+const W = window.innerWidth;
+const H = window.innerHeight;
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.setSize(W, H);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.24;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+container.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#0c1018');
+scene.fog = new THREE.Fog('#0c1018', 2.2, 7.5);
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environmentIntensity = 0.68;
+
+const camera = new THREE.PerspectiveCamera(56, W / H, 0.01, 30);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.minDistance = 0.07;
+controls.maxDistance = 1.5;
+
+// ═══════════════════════════════════════════════════════════════
+// LIGHTING — Directional key + crisp Valorant rim lights to reveal every crease & bevel
+// ═══════════════════════════════════════════════════════════════
+
+const hemiLight = new THREE.HemisphereLight('#cbd5e1', '#0f172a', 0.72);
+scene.add(hemiLight);
+
+const keyLight = new THREE.DirectionalLight('#f8fafc', 2.45);
+keyLight.position.set(0.85, 1.85, 0.95);
+keyLight.castShadow = true;
+keyLight.shadow.mapSize.set(2048, 2048);
+keyLight.shadow.bias = -0.0004;
+scene.add(keyLight);
+
+const rimCool = new THREE.DirectionalLight('#93c5fd', 1.35);
+rimCool.position.set(-1.6, 0.85, -1.1);
+scene.add(rimCool);
+
+const rimWarm = new THREE.DirectionalLight('#cbd5e1', 0.95);
+rimWarm.position.set(1.5, 0.4, -1.2);
+scene.add(rimWarm);
+
+const underFill = new THREE.PointLight('#94a3b8', 0.45, 2.5);
+underFill.position.set(0, -0.35, 0.25);
+scene.add(underFill);
+
+// Subtle dark tactical backdrop floor far enough down not to wash out hands
+const floor = new THREE.Mesh(
+  new THREE.PlaneGeometry(10, 10),
+  new THREE.MeshStandardMaterial({ color: '#0f141e', roughness: 0.92, metalness: 0.05 })
+);
+floor.rotation.x = -Math.PI / 2;
+floor.position.y = -0.65;
+floor.receiveShadow = true;
+scene.add(floor);
+
+// ═══════════════════════════════════════════════════════════════
+// 512px PROCEDURAL PBR TEXTURES (CORDURA, CARBON, LEATHER, STRAP WEAVE)
+// ═══════════════════════════════════════════════════════════════
+
+function heightToNormalCanvas(heightData, size, strength) {
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const img = ctx.createImageData(size, size);
+  const d = img.data;
+  for (let y = 0; y < size; y++) {
+    const ym = (y - 1 + size) % size;
+    const yp = (y + 1) % size;
+    for (let x = 0; x < size; x++) {
+      const xm = (x - 1 + size) % size;
+      const xp = (x + 1) % size;
+      const dx = (heightData[y * size + xp] - heightData[y * size + xm]) * strength;
+      const dy = (heightData[yp * size + x] - heightData[ym * size + x]) * strength;
+      let nx = -dx;
+      let ny = -dy;
+      let nz = 1.0;
+      const len = Math.hypot(nx, ny, nz);
+      nx /= len; ny /= len; nz /= len;
+      const idx = (y * size + x) * 4;
+      d[idx] = Math.round((nx * 0.5 + 0.5) * 255);
+      d[idx + 1] = Math.round((ny * 0.5 + 0.5) * 255);
+      d[idx + 2] = Math.round((nz * 0.5 + 0.5) * 255);
+      d[idx + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
+
+// 1. Heavy Tactical Cloth / Ripstop + Woven Seam Micro-Detail (512x512)
+function createTacticalClothTextures() {
+  const size = 512;
+  const height = new Float32Array(size * size);
+  const aCanvas = document.createElement('canvas');
+  aCanvas.width = size; aCanvas.height = size;
+  const aCtx = aCanvas.getContext('2d');
+  const aImg = aCtx.createImageData(size, size);
+
+  const rCanvas = document.createElement('canvas');
+  rCanvas.width = size; rCanvas.height = size;
+  const rCtx = rCanvas.getContext('2d');
+  const rImg = rCtx.createImageData(size, size);
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const idx = y * size + x;
+      // Fine cross-hatch cordura weave
+      const wx = Math.sin(x * Math.PI * 0.5);
+      const wy = Math.sin(y * Math.PI * 0.5);
+      const weave = (wx * wy) * 0.16;
+      // Ripstop reinforcement grid every 24px
+      const rip = (x % 24 < 2 || y % 24 < 2) ? 0.22 : 0;
+      // Macro organic cloth mottling
+      const mottle =
+        Math.sin(x * 0.035 + y * 0.025) * 0.12 +
+        Math.cos(x * 0.07 - y * 0.06) * 0.08;
+      const grain = Math.abs((Math.sin(x * 12.9898 + y * 78.233) * 43758.5453) % 1) * 0.08;
+
+      const h = 0.5 + weave + rip + mottle + grain;
+      height[idx] = h;
+
+      // Dark charcoal tactical cloth
+      const v = 24 + h * 16;
+      const p = idx * 4;
+      aImg.data[p] = v * 0.94;
+      aImg.data[p + 1] = v * 0.96;
+      aImg.data[p + 2] = v * 1.05;
+      aImg.data[p + 3] = 255;
+
+      const rough = Math.round((0.82 + (1 - h) * 0.15) * 255);
+      rImg.data[p] = rough;
+      rImg.data[p + 1] = rough;
+      rImg.data[p + 2] = rough;
+      rImg.data[p + 3] = 255;
+    }
+  }
+  aCtx.putImageData(aImg, 0, 0);
+  rCtx.putImageData(rImg, 0, 0);
+
+  const map = new THREE.CanvasTexture(aCanvas);
+  map.colorSpace = THREE.SRGBColorSpace;
+  map.wrapS = map.wrapT = THREE.RepeatWrapping;
+  map.repeat.set(3, 5);
+
+  const roughnessMap = new THREE.CanvasTexture(rCanvas);
+  roughnessMap.wrapS = roughnessMap.wrapT = THREE.RepeatWrapping;
+  roughnessMap.repeat.set(3, 5);
+
+  const normalMap = heightToNormalCanvas(height, size, 2.4);
+  normalMap.repeat.set(3, 5);
+
+  return { map, normalMap, roughnessMap };
+}
+
+// 2. Ballistic Hex-Mesh & Carbon Fiber Weave (512x512)
+function createBallisticHexTextures() {
+  const size = 256;
+  const height = new Float32Array(size * size);
+  const aCanvas = document.createElement('canvas');
+  aCanvas.width = size; aCanvas.height = size;
+  const aCtx = aCanvas.getContext('2d');
+  const aImg = aCtx.createImageData(size, size);
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const idx = y * size + x;
+      const cx = Math.floor(x / 8);
+      const cy = Math.floor(y / 8);
+      const lx = (x % 8) / 8;
+      const ly = (y % 8) / 8;
+      const parity = (cx + cy) % 2 === 0;
+      const cell = parity
+        ? Math.sin(lx * Math.PI) * (0.65 + 0.35 * Math.sin(ly * Math.PI))
+        : Math.sin(ly * Math.PI) * (0.65 + 0.35 * Math.sin(lx * Math.PI));
+      height[idx] = cell;
+
+      const c = 22 + cell * 18;
+      const p = idx * 4;
+      aImg.data[p] = c * 0.96;
+      aImg.data[p + 1] = c * 0.98;
+      aImg.data[p + 2] = c * 1.04;
+      aImg.data[p + 3] = 255;
+    }
+  }
+  aCtx.putImageData(aImg, 0, 0);
+  const map = new THREE.CanvasTexture(aCanvas);
+  map.colorSpace = THREE.SRGBColorSpace;
+  map.wrapS = map.wrapT = THREE.RepeatWrapping;
+  map.repeat.set(6, 6);
+
+  const normalMap = heightToNormalCanvas(height, size, 2.8);
+  normalMap.repeat.set(6, 6);
+  return { map, normalMap };
+}
+
+// 3. Tactical Nylon Webbing Strap (ribbed weave + stitched borders)
+function createStrapTextures() {
+  const size = 256;
+  const height = new Float32Array(size * size);
+  const aCanvas = document.createElement('canvas');
+  aCanvas.width = size; aCanvas.height = size;
+  const aCtx = aCanvas.getContext('2d');
+  const aImg = aCtx.createImageData(size, size);
+
+  for (let y = 0; y < size; y++) {
+    const v = y / size;
+    const isStitchRow = (Math.abs(v - 0.14) < 0.025 || Math.abs(v - 0.86) < 0.025);
+    const stitchDash = isStitchRow && (x => (x % 16) < 9);
+    for (let x = 0; x < size; x++) {
+      const idx = y * size + x;
+      const rib = Math.sin(x * 0.8) * 0.35 + Math.sin(y * 1.2) * 0.15;
+      const stitch = (isStitchRow && (x % 18) < 10) ? 0.55 : 0;
+      const h = 0.45 + rib * 0.35 + stitch;
+      height[idx] = h;
+
+      const c = stitch > 0 ? 64 : 26 + rib * 10;
+      const p = idx * 4;
+      aImg.data[p] = c * 0.96;
+      aImg.data[p + 1] = c * 0.98;
+      aImg.data[p + 2] = c * 1.06;
+      aImg.data[p + 3] = 255;
+    }
+  }
+  aCtx.putImageData(aImg, 0, 0);
+  const map = new THREE.CanvasTexture(aCanvas);
+  map.colorSpace = THREE.SRGBColorSpace;
+  map.wrapS = map.wrapT = THREE.RepeatWrapping;
+  map.repeat.set(4, 1);
+
+  const normalMap = heightToNormalCanvas(height, size, 3.0);
+  normalMap.repeat.set(4, 1);
+  return { map, normalMap };
+}
+
+// 4. Micro-Grain Leather Grip (Palm & Finger Pads)
+function createLeatherTextures() {
+  const size = 256;
+  const height = new Float32Array(size * size);
+  const pts = [];
+  for (let i = 0; i < 220; i++) {
+    pts.push([
+      ((Math.sin(i * 127.1) * 43758.5453) % 1 + 1) % 1 * size,
+      ((Math.sin(i * 269.5) * 43758.5453) % 1 + 1) % 1 * size,
+    ]);
+  }
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      let minD = 9999;
+      for (let i = 0; i < pts.length; i++) {
+        let dx = Math.abs(x - pts[i][0]);
+        let dy = Math.abs(y - pts[i][1]);
+        if (dx > size * 0.5) dx = size - dx;
+        if (dy > size * 0.5) dy = size - dy;
+        const d = dx * dx + dy * dy;
+        if (d < minD) minD = d;
+      }
+      height[y * size + x] = Math.pow(Math.max(0, 1 - Math.sqrt(minD) / 13), 0.6);
+    }
+  }
+  const normalMap = heightToNormalCanvas(height, size, 2.5);
+  normalMap.repeat.set(3, 3);
+  return { normalMap };
+}
+
+const clothTex = createTacticalClothTextures();
+const hexTex = createBallisticHexTextures();
+const strapTex = createStrapTextures();
+const leatherTex = createLeatherTextures();
+
+// ═══════════════════════════════════════════════════════════════
+// MATERIALS (ALL DARK CHARCOAL / OBSIDIAN WITH VERTEX AO SUPPORT!)
+// ═══════════════════════════════════════════════════════════════
+
+const sleeveMat = new THREE.MeshPhysicalMaterial({
+  map: clothTex.map,
+  normalMap: clothTex.normalMap,
+  normalScale: new THREE.Vector2(1.15, 1.15),
+  roughnessMap: clothTex.roughnessMap,
+  color: '#b8c0ce',
+  roughness: 0.90,
+  metalness: 0.03,
+  sheen: 0.65,
+  sheenRoughness: 0.70,
+  sheenColor: new THREE.Color('#475569'),
+  vertexColors: true, // Uses sculpted fold Ambient Occlusion!
+});
+
+const innerWrapMat = new THREE.MeshPhysicalMaterial({
+  map: strapTex.map,
+  normalMap: strapTex.normalMap,
+  normalScale: new THREE.Vector2(1.0, 1.0),
+  color: '#7c8596',
+  roughness: 0.84,
+  metalness: 0.05,
+  sheen: 0.4,
+  sheenColor: new THREE.Color('#334155'),
+  vertexColors: true,
+});
+
+const gloveDorsalMat = new THREE.MeshPhysicalMaterial({
+  map: hexTex.map,
+  normalMap: hexTex.normalMap,
+  normalScale: new THREE.Vector2(1.0, 1.0),
+  color: '#9aa3b2',
+  roughness: 0.62,
+  metalness: 0.10,
+  vertexColors: true,
+});
+
+const glovePalmMat = new THREE.MeshPhysicalMaterial({
+  normalMap: leatherTex.normalMap,
+  normalScale: new THREE.Vector2(1.0, 1.0),
+  color: '#17191f',
+  roughness: 0.68,
+  metalness: 0.06,
+  vertexColors: true,
+});
+
+const armorPlateMat = new THREE.MeshPhysicalMaterial({
+  map: hexTex.map,
+  normalMap: hexTex.normalMap,
+  normalScale: new THREE.Vector2(0.45, 0.45),
+  color: '#3e4554',
+  roughness: 0.36,
+  metalness: 0.42,
+  clearcoat: 0.32,
+  clearcoatRoughness: 0.38,
+});
+
+const strapMat = new THREE.MeshPhysicalMaterial({
+  map: strapTex.map,
+  normalMap: strapTex.normalMap,
+  normalScale: new THREE.Vector2(1.1, 1.1),
+  color: '#8892a3',
+  roughness: 0.78,
+  metalness: 0.06,
+});
+
+const metalHardwareMat = new THREE.MeshStandardMaterial({
+  color: '#475569',
+  roughness: 0.28,
+  metalness: 0.85,
+});
+
+const stitchMat = new THREE.MeshStandardMaterial({
+  color: '#475569',
+  roughness: 0.75,
+  metalness: 0.10,
+});
+
+// ═══════════════════════════════════════════════════════════════
+// PARAMETRIC HIGH-DETAIL SLEEVE WITH DEEP CLOTH FOLDS & VERTEX AO
+// ═══════════════════════════════════════════════════════════════
+
+function smoothstep(edge0, edge1, x) {
+  const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+}
+
+const SLEEVE_Z_START = 0.040;
+const SLEEVE_Z_END = 0.56;
+
+function evalSleeveDisplacement(t, theta, s) {
+  // Deep natural bunched folds near cuff (t=0.06..0.28) + elbow flex tension folds (t=0.4..0.85)
+  const cuffBunch = Math.exp(-Math.pow((t - 0.13) / 0.11, 2));
+  const midFolds = smoothstep(0.08, 0.45, t);
+
+  // Asymmetric diagonal drapery wrinkles (4-6mm peak-to-valley so light catches real folds!)
+  const f1 = Math.sin(theta * 2.0 + t * 22.0 * s + 0.4) * 0.0026;
+  const f2 = Math.sin(theta * 3.0 - t * 34.0 * s + 1.5) * 0.0018;
+  const f3 = Math.cos(theta * 5.0 + t * 48.0 * s) * 0.0011;
+  // Compressed accordion rings right behind cuff
+  const cuffRing = Math.sin(t * 72.0 + Math.cos(theta * 2.0) * 0.9) * 0.0022 * cuffBunch;
+  // Crisp tailored outer/inner seam line
+  const seamGroove = -Math.exp(-Math.pow(Math.sin(theta) / 0.08, 2)) * 0.0011;
+
+  const disp = (f1 + f2 + f3) * (0.55 + 0.95 * cuffBunch + 0.35 * midFolds) + cuffRing + seamGroove;
+  return disp;
+}
+
+function evalSleevePoint(t, theta, s, radialExtra = 0) {
+  const z = SLEEVE_Z_START + t * (SLEEVE_Z_END - SLEEVE_Z_START);
+
+  // Thick folded-over jacket cuff hem
+  let cuffFactor = 1.0;
+  if (t < 0.022) {
+    cuffFactor = 0.75 + 0.31 * Math.sin((t / 0.022) * Math.PI * 0.5);
+  } else if (t < 0.060) {
+    cuffFactor = 1.06 - ((t - 0.022) / 0.038) * 0.06;
+  }
+
+  const muscleSwell = Math.sin(smoothstep(0.05, 0.85, t) * Math.PI) * 0.0048;
+  const baseRx = (0.0258 + Math.pow(t, 0.76) * 0.0245 + muscleSwell) * cuffFactor;
+  const baseRy = baseRx * (0.78 + t * 0.12);
+
+  const cosT = Math.cos(theta);
+  const sinT = Math.sin(theta);
+  const disp = evalSleeveDisplacement(t, theta, s);
+  const lateralBias = 1.0 + 0.07 * cosT * s * smoothstep(0.08, 0.7, t);
+
+  return {
+    x: cosT * (baseRx * lateralBias + disp + radialExtra),
+    y: sinT * (baseRy + (disp + radialExtra) * 0.88),
+    z,
+    disp,
+  };
+}
+
+/**
+ * Builds an armored forearm gauntlet plate (overlapping beveled tactical shell with rivets)
+ * hugging the exact curved forearm geometry.
+ */
+function buildForearmArmorPlate(zStart, zEnd, thetaCenter, arcHalf, thickness, s) {
+  const group = new THREE.Group();
+  const uSegs = 22;
+  const vSegs = 14;
+  const positions = [];
+  const uvs = [];
+  const indices = [];
+
+  for (let j = 0; j <= vSegs; j++) {
+    const vt = j / vSegs;
+    const z = zStart + vt * (zEnd - zStart);
+    const t = (z - SLEEVE_Z_START) / (SLEEVE_Z_END - SLEEVE_Z_START);
+    // Sharp armored bevels along edges + subtle center spine ridge
+    const bevelV = Math.min(1, Math.min(vt, 1 - vt) * 7.0);
+
+    for (let i = 0; i <= uSegs; i++) {
+      const u = i / uSegs;
+      // Tapered shield silhouette (wider near elbow, sleeker toward wrist)
+      const widthTaper = 0.82 + 0.18 * vt;
+      const theta = thetaCenter + (u - 0.5) * 2 * arcHalf * widthTaper;
+      const bevelU = Math.min(1, Math.min(u, 1 - u) * 6.5);
+      const ridge = 1.0 + 0.35 * (1.0 - Math.abs(u - 0.5) * 2.0);
+      // Recessed tactical vent groove across middle
+      const ventGroove = Math.abs(vt - 0.52) < 0.08 ? 0.55 : 1.0;
+
+      const offset = thickness * Math.pow(bevelU * bevelV, 0.35) * ridge * ventGroove + 0.0012;
+      const p = evalSleevePoint(t, theta, s, offset);
+      positions.push(p.x, p.y, p.z);
+      uvs.push(u, vt);
+    }
+  }
+  for (let j = 0; j < vSegs; j++) {
+    for (let i = 0; i < uSegs; i++) {
+      const a = j * (uSegs + 1) + i;
+      const b = a + uSegs + 1;
+      indices.push(a, a + 1, b, a + 1, b + 1, b);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+
+  const plate = new THREE.Mesh(geo, armorPlateMat);
+  plate.castShadow = true;
+  plate.receiveShadow = true;
+  group.add(plate);
+
+  // Add 4 micro titanium hex bolts at plate corners
+  const boltGeo = new THREE.CylinderGeometry(0.0014, 0.0014, 0.0018, 6);
+  const corners = [
+    [0.14, 0.18],
+    [0.86, 0.18],
+    [0.14, 0.82],
+    [0.86, 0.82],
+  ];
+  corners.forEach(([cu, cv]) => {
+    const z = zStart + cv * (zEnd - zStart);
+    const t = (z - SLEEVE_Z_START) / (SLEEVE_Z_END - SLEEVE_Z_START);
+    const widthTaper = 0.82 + 0.18 * cv;
+    const theta = thetaCenter + (cu - 0.5) * 2 * arcHalf * widthTaper;
+    const p = evalSleevePoint(t, theta, s, thickness + 0.0016);
+    const bolt = new THREE.Mesh(boltGeo, metalHardwareMat);
+    bolt.position.set(p.x, p.y, p.z);
+    // Orient bolt normal roughly outward
+    const norm = new THREE.Vector3(p.x, p.y, 0).normalize();
+    bolt.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), norm);
+    group.add(bolt);
+  });
+
+  return group;
+}
+
+/**
+ * Builds diagonal criss-cross wrapped tactical cloth/webbing straps (Valorant Omen style!)
+ * hugging the folded sleeve cleanly.
+ */
+function buildDiagonalForearmWrap(zCenter, width, pitchZ, thickness, s, mat) {
+  const radSegs = 52;
+  const lenSegs = 6;
+  const positions = [];
+  const uvs = [];
+  const indices = [];
+
+  for (let j = 0; j <= lenSegs; j++) {
+    const vt = j / lenSegs;
+    const bevel = Math.pow(Math.sin(vt * Math.PI), 0.38);
+
+    for (let i = 0; i <= radSegs; i++) {
+      const u = i / radSegs;
+      const theta = u * Math.PI * 2;
+      // Helical diagonal offset around the forearm!
+      const z = zCenter + Math.sin(theta * s) * pitchZ + (vt - 0.5) * width;
+      const t = Math.max(0.02, Math.min(0.98, (z - SLEEVE_Z_START) / (SLEEVE_Z_END - SLEEVE_Z_START)));
+      const p = evalSleevePoint(t, theta, s, thickness * (0.25 + 0.75 * bevel) + 0.0005);
+      positions.push(p.x, p.y, p.z);
+      uvs.push(u * 3.0, vt);
+    }
+  }
+  for (let j = 0; j < lenSegs; j++) {
+    for (let i = 0; i < radSegs; i++) {
+      const a = j * (radSegs + 1) + i;
+      const b = a + radSegs + 1;
+      indices.push(a, a + 1, b, a + 1, b + 1, b);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  return mesh;
+}
+
+function buildSculptedSleeveAndWrist(s) {
+  const group = new THREE.Group();
+
+  // 1. Closed Inner Wrist Compression Sleeve + Diagonal Wrist Tape (recessed cleanly inside glove cuff)
+  {
+    const radSegs = 40;
+    const lenSegs = 36;
+    const positions = [];
+    const colors = [];
+    const uvs = [];
+    const indices = [];
+
+    for (let j = 0; j <= lenSegs; j++) {
+      const t = j / lenSegs;
+      const z = -0.010 + t * 0.088;
+      // Crisscross tactical bandage ribbing
+      const rib = Math.sin(t * Math.PI * 14) * 0.0005;
+      const tipCap = t < 0.14 ? Math.sin((t / 0.14) * Math.PI * 0.5) : 1.0;
+      const baseRx = (0.0168 + t * 0.0064 + rib) * (0.25 + 0.75 * tipCap);
+      const baseRy = baseRx * (0.72 + t * 0.06);
+
+      // AO shadow near cuff tuck (t -> 1)
+      const ao = 0.72 + 0.28 * (1.0 - smoothstep(0.65, 1.0, t) * 0.55);
+
+      for (let i = 0; i <= radSegs; i++) {
+        const u = i / radSegs;
+        const theta = u * Math.PI * 2;
+        const cosT = Math.cos(theta);
+        const sinT = Math.sin(theta);
+        const flatBot = sinT < 0 ? 1.0 - 0.06 * (-sinT) : 1.0;
+        positions.push(cosT * baseRx, sinT * baseRy * flatBot, z);
+        const shade = ao * (0.88 + 0.12 * (rib / 0.0005));
+        colors.push(shade, shade, shade);
+        uvs.push(u * 2, t * 2);
+      }
+    }
+    for (let j = 0; j < lenSegs; j++) {
+      for (let i = 0; i < radSegs; i++) {
+        const a = j * (radSegs + 1) + i;
+        const b = a + radSegs + 1;
+        indices.push(a, a + 1, b, a + 1, b + 1, b);
+      }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    geo.setIndex(indices);
+    geo.computeVertexNormals();
+    const mesh = new THREE.Mesh(geo, innerWrapMat);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    group.add(mesh);
+  }
+
+  // 2. Outer Sculpted Jacket Sleeve with Deep Cloth Folds + Baked Vertex Ambient Occlusion
+  {
+    const radSegs = 56;
+    const lenSegs = 96;
+    const positions = [];
+    const colors = [];
+    const uvs = [];
+    const indices = [];
+
+    for (let j = 0; j <= lenSegs; j++) {
+      const t = j / lenSegs;
+      // Subtle AO darkening inside cuff lip & under straps
+      const cuffShadow = t < 0.03 ? 0.55 + (t / 0.03) * 0.45 : 1.0;
+
+      for (let i = 0; i <= radSegs; i++) {
+        const u = i / radSegs;
+        const theta = u * Math.PI * 2;
+        const p = evalSleevePoint(t, theta, s, 0);
+        positions.push(p.x, p.y, p.z);
+        uvs.push(u * 2.5, t * 4.5);
+
+        // Bake crisp crease AO: valleys of cloth folds are darker, ridges catch light!
+        const foldAo = Math.max(0.45, Math.min(1.08, 0.86 + p.disp * 55.0));
+        const ao = foldAo * cuffShadow;
+        colors.push(ao, ao, ao);
+      }
+    }
+    for (let j = 0; j < lenSegs; j++) {
+      for (let i = 0; i < radSegs; i++) {
+        const a = j * (radSegs + 1) + i;
+        const b = a + radSegs + 1;
+        indices.push(a, a + 1, b, a + 1, b + 1, b);
+      }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    geo.setIndex(indices);
+    geo.computeVertexNormals();
+    const sleeveMesh = new THREE.Mesh(geo, sleeveMat);
+    sleeveMesh.castShadow = true;
+    sleeveMesh.receiveShadow = true;
+    group.add(sleeveMesh);
+  }
+
+  // 3. Layered Omen/Valorant Forearm Armor Plates + Diagonal Criss-Cross Tactical Wraps
+  // Diagonal overlapping wraps near wrist cuff
+  group.add(buildDiagonalForearmWrap(0.088, 0.022,  0.011, 0.0024, s, strapMat));
+  group.add(buildDiagonalForearmWrap(0.114, 0.020, -0.012, 0.0022, s, strapMat));
+  group.add(buildDiagonalForearmWrap(0.242, 0.020,  0.009, 0.0020, s, strapMat));
+
+  // Two overlapping segmented dark armor gauntlet plates on dorsal/outer forearm (with titanium bolts!)
+  const outerTheta = s > 0 ? Math.PI * 0.38 : Math.PI * 0.62;
+  group.add(buildForearmArmorPlate(0.125, 0.195, outerTheta, Math.PI * 0.34, 0.0036, s));
+  group.add(buildForearmArmorPlate(0.188, 0.258, outerTheta, Math.PI * 0.30, 0.0032, s));
+
+  // Rounded anodized titanium strap clasps on outer forearm wraps
+  [0.088, 0.242].forEach((zc, k) => {
+    const t = (zc - SLEEVE_Z_START) / (SLEEVE_Z_END - SLEEVE_Z_START);
+    const theta = s > 0 ? 0.15 : Math.PI - 0.15;
+    const p = evalSleevePoint(t, theta, s, 0.0028);
+    const clasp = new THREE.Mesh(new THREE.CapsuleGeometry(0.0038, 0.014, 6, 12), metalHardwareMat);
+    clasp.rotation.x = Math.PI / 2;
+    clasp.rotation.z = k === 0 ? 0.25 * s : -0.2 * s;
+    clasp.scale.set(0.45, 1.0, 1.0);
+    clasp.position.set(p.x, p.y, p.z);
+    group.add(clasp);
+  });
+
+  return group;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SCULPTED ANATOMICAL HAND + SEGMENTED KNUCKLE ARMOR + STITCHING
+// ═══════════════════════════════════════════════════════════════
+
+function buildSculptedHandShell(s) {
+  const group = new THREE.Group();
+
+  // 1. Main Anatomical Hand Shell (closed wrist ball, palm hollow, thenar pad, metacarpal tendons, vertex AO)
+  {
+    const radSegs = 44;
+    const lenSegs = 36;
+    const positions = [];
+    const colors = [];
+    const uvs = [];
+    const indices = [];
+
+    for (let j = 0; j <= lenSegs; j++) {
+      const t = j / lenSegs;
+      const z = 0.032 - t * 0.060;
+
+      const wristDome = t < 0.14 ? Math.sin((t / 0.14) * Math.PI * 0.5) : 1.0;
+      const palmFlare = smoothstep(0.10, 0.72, t) * (1.0 - 0.12 * smoothstep(0.82, 1.0, t));
+      const rx = (0.0195 + palmFlare * 0.0080) * (0.22 + 0.78 * wristDome);
+      const ry = 0.0142 * (1.0 - 0.30 * smoothstep(0.18, 1.0, t)) * (0.22 + 0.78 * wristDome);
+
+      for (let i = 0; i <= radSegs; i++) {
+        const u = i / radSegs;
+        const theta = u * Math.PI * 2;
+        const cosT = Math.cos(theta);
+        const sinT = Math.sin(theta);
+
+        const thumbSideWeight = Math.max(0, -cosT * s);
+        const pinkySideWeight = Math.max(0, cosT * s);
+
+        const thenar = thumbSideWeight * Math.max(0, -sinT) * Math.sin(smoothstep(0.14, 0.75, t) * Math.PI) * 0.0056;
+        const hypothenar = pinkySideWeight * Math.max(0, -sinT) * Math.sin(smoothstep(0.10, 0.70, t) * Math.PI) * 0.0029;
+        const palmCenter = Math.max(0, -sinT) * Math.exp(-Math.pow(cosT / 0.55, 2)) * smoothstep(0.24, 0.85, t);
+        const palmHollow = -palmCenter * 0.0028;
+        const dorsalArch = Math.max(0, sinT) * (1.0 - cosT * cosT * 0.65) * 0.0022 * Math.sin(t * Math.PI);
+        // Sculpted metacarpal tendon lines running from wrist to each knuckle!
+        const tendonRipples = Math.max(0, sinT) * smoothstep(0.25, 0.85, t) * (1.0 - smoothstep(0.88, 1.0, t)) *
+          Math.cos(cosT * Math.PI * 3.6) * 0.0009;
+        const knuckleBump = Math.max(0, sinT) * smoothstep(0.66, 0.98, t) * (0.0018 + 0.0011 * Math.cos(cosT * Math.PI * 3.6));
+
+        const endCap = t > 0.90 ? Math.sqrt(Math.max(0.08, 1.0 - Math.pow((t - 0.90) / 0.10, 2))) : 1.0;
+
+        const x = cosT * rx * (1.0 + thumbSideWeight * 0.10 * Math.sin(t * Math.PI * 0.85));
+        const y = sinT * ry * endCap + dorsalArch + tendonRipples + knuckleBump - thenar - hypothenar - palmHollow;
+
+        positions.push(x, y, z);
+        uvs.push(u * 2, t * 2);
+
+        // Bake palm hollow & wrist-strap crease AO
+        const ao = 0.82 + 0.18 * Math.max(0, sinT) - palmCenter * 18.0 + tendonRipples * 35.0;
+        const clampedAo = Math.max(0.55, Math.min(1.04, ao));
+        colors.push(clampedAo, clampedAo, clampedAo);
+      }
+    }
+    for (let j = 0; j < lenSegs; j++) {
+      for (let i = 0; i < radSegs; i++) {
+        const a = j * (radSegs + 1) + i;
+        const b = a + radSegs + 1;
+        indices.push(a, b, a + 1, a + 1, b, b + 1);
+      }
+    }
+    const handGeo = new THREE.BufferGeometry();
+    handGeo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    handGeo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    handGeo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    handGeo.setIndex(indices);
+    handGeo.computeVertexNormals();
+    const handMesh = new THREE.Mesh(handGeo, gloveDorsalMat);
+    handMesh.castShadow = true;
+    handMesh.receiveShadow = true;
+    group.add(handMesh);
+  }
+
+  // 2. Sculpted Wrist Retention Strap with Tactical Clasp (replaces bare strap)
+  {
+    const wRad = 40;
+    const wLen = 10;
+    const wPos = [];
+    const wUv = [];
+    const wIdx = [];
+    for (let j = 0; j <= wLen; j++) {
+      const vt = j / wLen;
+      const z = 0.025 - vt * 0.017;
+      const bevel = Math.pow(Math.sin(vt * Math.PI), 0.45);
+      const t = (0.032 - z) / 0.060;
+      const rx = 0.0204 + smoothstep(0.10, 0.72, t) * 0.0080 + 0.0020 * bevel;
+      const ry = 0.0146 * (1.0 - 0.30 * smoothstep(0.18, 1.0, t)) + 0.0018 * bevel;
+      for (let i = 0; i <= wRad; i++) {
+        const u = i / wRad;
+        const theta = u * Math.PI * 2;
+        wPos.push(Math.cos(theta) * rx, Math.sin(theta) * ry, z);
+        wUv.push(u * 3, vt);
+      }
+    }
+    for (let j = 0; j < wLen; j++) {
+      for (let i = 0; i < wRad; i++) {
+        const a = j * (wRad + 1) + i;
+        const b = a + wRad + 1;
+        wIdx.push(a, b, a + 1, a + 1, b, b + 1);
+      }
+    }
+    const wGeo = new THREE.BufferGeometry();
+    wGeo.setAttribute('position', new THREE.Float32BufferAttribute(wPos, 3));
+    wGeo.setAttribute('uv', new THREE.Float32BufferAttribute(wUv, 2));
+    wGeo.setIndex(wIdx);
+    wGeo.computeVertexNormals();
+    const wMesh = new THREE.Mesh(wGeo, strapMat);
+    wMesh.castShadow = true;
+    group.add(wMesh);
+
+    // Small matte titanium strap buckle on dorsal-outer wrist
+    const wristBuckle = new THREE.Mesh(new THREE.CapsuleGeometry(0.0032, 0.011, 5, 10), metalHardwareMat);
+    wristBuckle.rotation.x = Math.PI / 2;
+    wristBuckle.scale.set(0.42, 1.0, 1.0);
+    wristBuckle.position.set(0.0215 * s, 0.004, 0.016);
+    group.add(wristBuckle);
+  }
+
+  // 3. FOUR INDIVIDUAL SEGMENTED KNUCKLE ARMOR PLATES (instead of 1 blocky bar!)
+  // + Dorsal Tactical V-Armor Shield behind the knuckles
+  {
+    const knuckleArcs = [
+      [0.14, 0.30], // Pinky knuckle
+      [0.32, 0.49], // Ring knuckle
+      [0.51, 0.68], // Middle knuckle
+      [0.70, 0.86], // Index knuckle
+    ];
+    knuckleArcs.forEach(([u0, u1]) => {
+      const kRad = 16;
+      const kLen = 12;
+      const kPos = [];
+      const kUv = [];
+      const kIdxArr = [];
+
+      for (let j = 0; j <= kLen; j++) {
+        const vt = j / kLen;
+        const t = 0.72 + vt * 0.23;
+        const z = 0.032 - t * 0.060;
+        const rx = 0.0195 + smoothstep(0.10, 0.72, t) * 0.0080;
+        const ry = 0.0142 * (1.0 - 0.30 * smoothstep(0.18, 1.0, t));
+        const bevelZ = smoothstep(0.0, 0.28, vt) * smoothstep(1.0, 0.72, vt);
+
+        for (let i = 0; i <= kRad; i++) {
+          const iu = i / kRad;
+          const u = u0 + iu * (u1 - u0);
+          const theta = Math.PI * u;
+          const cosT = Math.cos(theta);
+          const sinT = Math.sin(theta);
+          const bevelX = smoothstep(0.0, 0.28, iu) * smoothstep(1.0, 0.72, iu);
+
+          // Molded flat-top beveled carbon knuckle shield (no diagonal triangulation crease!)
+          const plateau = bevelZ * bevelX;
+          const thickness = 0.0032 * plateau;
+
+          kPos.push(cosT * (rx + thickness * 0.4), sinT * ry + 0.0020 + thickness, z);
+          kUv.push(iu, vt);
+        }
+      }
+      for (let j = 0; j < kLen; j++) {
+        for (let i = 0; i < kRad; i++) {
+          const a = j * (kRad + 1) + i;
+          const b = a + kRad + 1;
+          kIdxArr.push(a, b, a + 1, a + 1, b, b + 1);
+        }
+      }
+      const kGeo = new THREE.BufferGeometry();
+      kGeo.setAttribute('position', new THREE.Float32BufferAttribute(kPos, 3));
+      kGeo.setAttribute('uv', new THREE.Float32BufferAttribute(kUv, 2));
+      kGeo.setIndex(kIdxArr);
+      kGeo.computeVertexNormals();
+      const kMesh = new THREE.Mesh(kGeo, armorPlateMat);
+      kMesh.castShadow = true;
+      group.add(kMesh);
+    });
+
+    // Secondary dorsal back-of-hand tactical armor patch (conformal curved plate behind knuckles)
+    const dRad = 18;
+    const dLen = 8;
+    const dPos = [];
+    const dUv = [];
+    const dIdx = [];
+    for (let j = 0; j <= dLen; j++) {
+      const vt = j / dLen;
+      const t = 0.32 + vt * 0.32;
+      const z = 0.032 - t * 0.060;
+      const rx = 0.0195 + smoothstep(0.10, 0.72, t) * 0.0080;
+      const ry = 0.0142 * (1.0 - 0.30 * smoothstep(0.18, 1.0, t));
+      const bevelZ = Math.pow(Math.sin(vt * Math.PI), 0.42);
+      const uSpan = 0.46 + 0.14 * vt; // subtle V-taper!
+      for (let i = 0; i <= dRad; i++) {
+        const iu = i / dRad;
+        const theta = Math.PI * (0.5 - uSpan * 0.5 + iu * uSpan);
+        const bevelX = Math.pow(Math.sin(iu * Math.PI), 0.40);
+        const thickness = 0.0018 * bevelZ * bevelX;
+        dPos.push(Math.cos(theta) * (rx + thickness * 0.3), Math.sin(theta) * ry + 0.0018 + thickness, z);
+        dUv.push(iu, vt);
+      }
+    }
+    for (let j = 0; j < dLen; j++) {
+      for (let i = 0; i < dRad; i++) {
+        const a = j * (dRad + 1) + i;
+        const b = a + dRad + 1;
+        dIdx.push(a, b, a + 1, a + 1, b, b + 1);
+      }
+    }
+    const dGeo = new THREE.BufferGeometry();
+    dGeo.setAttribute('position', new THREE.Float32BufferAttribute(dPos, 3));
+    dGeo.setAttribute('uv', new THREE.Float32BufferAttribute(dUv, 2));
+    dGeo.setIndex(dIdx);
+    dGeo.computeVertexNormals();
+    const dMesh = new THREE.Mesh(dGeo, armorPlateMat);
+    dMesh.castShadow = true;
+    group.add(dMesh);
+  }
+
+  // 4. Conformal Textured Leather Palm Grip Pad + Thumb-Web Reinforcement
+  {
+    const pGeo = new THREE.SphereGeometry(0.021, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.55);
+    pGeo.rotateX(Math.PI);
+    pGeo.scale(0.84, 0.22, 0.84);
+    // Add dummy vertex color so glovePalmMat with vertexColors:true works cleanly
+    const count = pGeo.attributes.position.count;
+    const cols = new Float32Array(count * 3).fill(1.0);
+    pGeo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+    const pMesh = new THREE.Mesh(pGeo, glovePalmMat);
+    pMesh.position.set(0, -0.0052, -0.003);
+    group.add(pMesh);
+  }
+
+  // 5. Raised Tactical Stitching Seam Line running around outer pinky edge of glove
+  {
+    const seamPts = [];
+    for (let i = 0; i <= 14; i++) {
+      const t = 0.18 + (i / 14) * 0.70;
+      const z = 0.032 - t * 0.060;
+      const rx = 0.0195 + smoothstep(0.10, 0.72, t) * 0.0080;
+      const theta = s > 0 ? 0.12 : Math.PI - 0.12;
+      seamPts.push(new THREE.Vector3(Math.cos(theta) * (rx + 0.0005), 0.001, z));
+    }
+    const seamGeo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(seamPts), 20, 0.00048, 6, false);
+    group.add(new THREE.Mesh(seamGeo, stitchMat));
+  }
+
+  return group;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// HIGH-DETAIL ARTICULATED FINGERS WITH ACCORDION FLEX RIBS & ARMOR TIPS
+// ═══════════════════════════════════════════════════════════════
+
+function buildSculptedPhalanxMesh(rBase, rTip, length, isDistal, mat, addFlexRibs = false) {
+  const group = new THREE.Group();
+  const radSegs = 24;
+  const lenSegs = 18;
+  const positions = [];
+  const colors = [];
+  const uvs = [];
+  const indices = [];
+
+  for (let j = 0; j <= lenSegs; j++) {
+    const t = j / lenSegs;
+    const z = -t * length;
+    const waist = 1.0 - 0.07 * Math.sin(t * Math.PI);
+    let r = (rBase + (rTip - rBase) * t) * waist;
+    if (isDistal && t > 0.70) {
+      const capT = (t - 0.70) / 0.30;
+      r *= Math.sqrt(Math.max(0.04, 1.0 - capT * capT));
+    }
+
+    // Tactical glove accordion flex-ribs across dorsal joint zones + palmar grip grooves!
+    const flexRibs = addFlexRibs
+      ? Math.sin(t * Math.PI * 8.0) * 0.00045 * Math.sin(t * Math.PI)
+      : 0;
+    const palmGripGrooves = isDistal
+      ? Math.sin(t * Math.PI * 7.0) * 0.00025 * Math.sin(t * Math.PI)
+      : 0;
+
+    for (let i = 0; i <= radSegs; i++) {
+      const u = i / radSegs;
+      const theta = u * Math.PI * 2;
+      const cosT = Math.cos(theta);
+      const sinT = Math.sin(theta);
+
+      const yScale = sinT < 0 ? 0.80 : 0.94;
+      const tipPad = isDistal && sinT < 0 ? Math.sin(t * Math.PI) * 0.0007 : 0;
+      const dorsalFlex = sinT > 0.25 ? flexRibs * ((sinT - 0.25) / 0.75) : 0;
+      const palmarGrip = sinT < -0.25 ? palmGripGrooves * ((-sinT - 0.25) / 0.75) : 0;
+      // Subtle molded dorsal armor ridge on proximal/distal
+      const ridge = !isDistal && sinT > 0.40
+        ? Math.sin(smoothstep(0.18, 0.82, t) * Math.PI) * Math.pow((sinT - 0.40) / 0.60, 1.2) * 0.0010
+        : 0;
+
+      positions.push(cosT * r, sinT * r * yScale - tipPad + dorsalFlex + palmarGrip + ridge, z);
+      uvs.push(u, t);
+
+      const ao = 0.88 + (dorsalFlex + palmarGrip) * 140.0;
+      const cAo = Math.max(0.62, Math.min(1.05, ao));
+      colors.push(cAo, cAo, cAo);
+    }
+  }
+
+  for (let j = 0; j < lenSegs; j++) {
+    for (let i = 0; i < radSegs; i++) {
+      const a = j * (radSegs + 1) + i;
+      const b = a + radSegs + 1;
+      indices.push(a, b, a + 1, a + 1, b, b + 1);
+    }
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  group.add(mesh);
+
+  // Seamless joint sphere with vertex colors
+  const jointGeo = new THREE.SphereGeometry(rBase * 0.98, 14, 10);
+  const jCols = new Float32Array(jointGeo.attributes.position.count * 3).fill(0.88);
+  jointGeo.setAttribute('color', new THREE.BufferAttribute(jCols, 3));
+  const jointMesh = new THREE.Mesh(jointGeo, mat);
+  jointMesh.scale.set(1.0, 0.88, 1.0);
+  group.add(jointMesh);
+
+  return group;
+}
+
+function buildArm(side) {
+  const s = side === 'right' ? 1 : -1;
+  const armRoot = new THREE.Group();
+  armRoot.name = `${side}_arm`;
+
+  const handPivot = new THREE.Group();
+  handPivot.name = `${side}_hand`;
+  armRoot.add(handPivot);
+
+  handPivot.add(buildSculptedHandShell(s));
+
+  const fingers = [];
+  const fingerConfigs = [
+    { x: -0.0175, y: 0.0012, z: -0.0255, r: 0.0052, l1: 0.0185, l2: 0.0130, l3: 0.0110, splay: -0.05 },
+    { x: -0.0058, y: 0.0022, z: -0.0270, r: 0.0054, l1: 0.0205, l2: 0.0145, l3: 0.0115, splay:  0.00 },
+    { x:  0.0058, y: 0.0014, z: -0.0258, r: 0.0050, l1: 0.0185, l2: 0.0130, l3: 0.0105, splay:  0.04 },
+    { x:  0.0165, y: 0.0000, z: -0.0235, r: 0.0044, l1: 0.0145, l2: 0.0105, l3: 0.0095, splay:  0.09 },
+  ];
+
+  fingerConfigs.forEach((cfg) => {
+    const proxRoot = new THREE.Group();
+    proxRoot.position.set(cfg.x * s, cfg.y, cfg.z);
+    proxRoot.rotation.y = cfg.splay * s;
+
+    proxRoot.add(buildSculptedPhalanxMesh(cfg.r, cfg.r * 0.88, cfg.l1, false, gloveDorsalMat, true));
+
+    const midRoot = new THREE.Group();
+    midRoot.position.set(0, 0, -cfg.l1);
+    midRoot.add(buildSculptedPhalanxMesh(cfg.r * 0.88, cfg.r * 0.78, cfg.l2, false, glovePalmMat, true));
+
+    const distRoot = new THREE.Group();
+    distRoot.position.set(0, 0, -cfg.l2);
+    distRoot.add(buildSculptedPhalanxMesh(cfg.r * 0.78, cfg.r * 0.65, cfg.l3, true, glovePalmMat, false));
+
+    midRoot.add(distRoot);
+    proxRoot.add(midRoot);
+    handPivot.add(proxRoot);
+    fingers.push({ proxRoot, midRoot, distRoot });
+  });
+
+  const thumbRoot = new THREE.Group();
+  thumbRoot.position.set(-0.021 * s, -0.0015, -0.005);
+  thumbRoot.add(buildSculptedPhalanxMesh(0.0066, 0.0058, 0.019, false, gloveDorsalMat, true));
+
+  const thumbDist = new THREE.Group();
+  thumbDist.position.set(0, 0, -0.019);
+  thumbDist.add(buildSculptedPhalanxMesh(0.0058, 0.0046, 0.015, true, glovePalmMat, false));
+  thumbRoot.add(thumbDist);
+  handPivot.add(thumbRoot);
+
+  const forearmPivot = new THREE.Group();
+  forearmPivot.name = `${side}_forearm`;
+  forearmPivot.add(buildSculptedSleeveAndWrist(s));
+  armRoot.add(forearmPivot);
+
+  const wristLocal = new THREE.Vector3(0, 0, 0.024);
+  const POS_Z = new THREE.Vector3(0, 0, 1);
+
+  function setHold({
+    handPos, handRot, shoulderTarget,
+    proxCurl, distCurl, indexCurl,
+    thumbRot = [0.22, 0.30 * s, -0.18 * s],
+    visible = true,
+  }) {
+    armRoot.visible = visible;
+    armRoot.position.set(handPos[0], handPos[1], handPos[2]);
+    armRoot.rotation.set(0, 0, 0);
+    handPivot.rotation.set(handRot[0], handRot[1], handRot[2]);
+
+    fingers.forEach((f, idx) => {
+      const pCurl = idx === 0 && indexCurl !== undefined ? indexCurl : proxCurl + idx * 0.035;
+      const dCurl = idx === 0 && indexCurl !== undefined ? indexCurl * 0.65 : distCurl;
+      f.proxRoot.rotation.x = pCurl * 0.65;
+      f.midRoot.rotation.x = pCurl * 0.55;
+      f.distRoot.rotation.x = dCurl * 0.65;
+    });
+    thumbRoot.rotation.set(thumbRot[0], thumbRot[1], thumbRot[2]);
+    thumbDist.rotation.x = -0.35;
+
+    const wristInArm = wristLocal.clone().applyEuler(handPivot.rotation);
+    forearmPivot.position.copy(wristInArm);
+
+    const target = new THREE.Vector3(
+      shoulderTarget[0] - handPos[0],
+      shoulderTarget[1] - handPos[1],
+      shoulderTarget[2] - handPos[2]
+    );
+    const dir = target.sub(wristInArm).normalize();
+    forearmPivot.quaternion.setFromUnitVectors(POS_Z, dir);
+  }
+
+  return { armRoot, handPivot, forearmPivot, setHold };
+}
+
+// Reaver-style purple Karambit context mesh
+function buildPreviewKarambit() {
+  const g = new THREE.Group();
+  const bladeMat = new THREE.MeshPhysicalMaterial({
+    color: '#3b0764',
+    emissive: '#6d28d9',
+    emissiveIntensity: 0.70,
+    metalness: 0.72,
+    roughness: 0.18,
+    clearcoat: 0.9,
+  });
+  const handleMat = new THREE.MeshStandardMaterial({
+    color: '#181524',
+    metalness: 0.60,
+    roughness: 0.34,
+  });
+
+  const bladeShape = new THREE.Shape();
+  bladeShape.moveTo(0, 0);
+  bladeShape.quadraticCurveTo(0.055, 0.015, 0.105, 0.058);
+  bladeShape.quadraticCurveTo(0.052, 0.032, -0.005, 0.016);
+  bladeShape.closePath();
+
+  const bladeGeo = new THREE.ExtrudeGeometry(bladeShape, {
+    depth: 0.003,
+    bevelEnabled: true,
+    bevelThickness: 0.0015,
+    bevelSize: 0.0015,
+    bevelSegments: 3,
+    curveSegments: 24,
+  });
+  bladeGeo.center();
+  const blade = new THREE.Mesh(bladeGeo, bladeMat);
+  blade.position.set(0.055, 0.015, 0);
+  g.add(blade);
+
+  const grip = new THREE.Mesh(new THREE.CapsuleGeometry(0.0085, 0.055, 6, 12), handleMat);
+  grip.rotation.z = Math.PI / 2 - 0.3;
+  grip.position.set(-0.012, -0.005, 0);
+  g.add(grip);
+
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.013, 0.0032, 10, 22), handleMat);
+  ring.position.set(-0.052, -0.016, 0);
+  g.add(ring);
+
+  return g;
+}
+
+const viewRig = new THREE.Group();
+scene.add(viewRig);
+
+const rightArm = buildArm('right');
+const leftArm = buildArm('left');
+viewRig.add(rightArm.armRoot, leftArm.armRoot);
+
+const previewKarambit = buildPreviewKarambit();
+rightArm.handPivot.add(previewKarambit);
+previewKarambit.position.set(0.002, -0.012, -0.008);
+previewKarambit.rotation.set(0.15, Math.PI * 0.52, -0.2);
+
+const poses = {
+  karambit: {
+    rigPos: [0.06, -0.14, -0.32],
+    right: {
+      handPos: [0.09, 0.01, 0.03],
+      handRot: [0.85, 0.42, -1.68],
+      shoulderTarget: [0.36, -0.22, 0.36],
+      proxCurl: -1.45,
+      distCurl: -1.25,
+      indexCurl: -1.35,
+      thumbRot: [0.28, -0.36, 0.24],
+    },
+    left: {
+      handPos: [-0.21, -0.03, 0.01],
+      handRot: [-0.25, -0.38, 1.05],
+      shoulderTarget: [-0.42, -0.24, 0.36],
+      proxCurl: -0.92,
+      distCurl: -0.78,
+      thumbRot: [0.16, 0.22, -0.18],
+    },
+    showBlade: true,
+  },
+  couteau: {
+    rigPos: [0.06, -0.14, -0.32],
+    right: {
+      handPos: [0.08, -0.01, 0.04],
+      handRot: [-0.72, 0.22, -1.38],
+      shoulderTarget: [0.34, -0.22, 0.40],
+      proxCurl: -1.48,
+      distCurl: -1.28,
+      indexCurl: -1.38,
+      thumbRot: [0.22, -0.32, 0.22],
+    },
+    left: {
+      handPos: [-0.20, -0.05, 0.02],
+      handRot: [-0.24, -0.36, 0.94],
+      shoulderTarget: [-0.42, -0.24, 0.36],
+      proxCurl: -0.92,
+      distCurl: -0.80,
+      thumbRot: [0.14, 0.20, -0.16],
+    },
+    showBlade: false,
+  },
+  ar15: {
+    rigPos: [0.02, -0.13, -0.36],
+    left: {
+      handPos: [-0.03, 0.005, -0.12],
+      handRot: [-0.04, -0.28, 1.80],
+      shoulderTarget: [-0.40, -0.22, 0.34],
+      proxCurl: -1.04,
+      distCurl: -0.90,
+      thumbRot: [0.06, -0.22, 0.18],
+    },
+    right: {
+      handPos: [0.02, -0.065, 0.14],
+      handRot: [-0.28, 0.20, -1.48],
+      shoulderTarget: [0.30, -0.25, 0.42],
+      proxCurl: -1.25,
+      distCurl: -1.05,
+      indexCurl: -0.65,
+      thumbRot: [0.22, -0.26, 0.18],
+    },
+    showBlade: false,
+  },
+  pistolet: {
+    rigPos: [0.04, -0.14, -0.38],
+    right: {
+      handPos: [0.02, 0.0, 0.09],
+      handRot: [-0.32, 0.20, -1.48],
+      shoulderTarget: [0.29, -0.22, 0.42],
+      proxCurl: -1.38,
+      distCurl: -1.18,
+      indexCurl: -0.62,
+      thumbRot: [0.14, -0.24, 0.16],
+    },
+    left: {
+      handPos: [-0.018, -0.012, 0.072],
+      handRot: [-0.26, -0.44, 1.56],
+      shoulderTarget: [-0.36, -0.22, 0.40],
+      proxCurl: -1.05,
+      distCurl: -0.90,
+      thumbRot: [0.10, 0.20, -0.14],
+    },
+    showBlade: false,
+  },
+  inspect: {
+    rigPos: [0.0, -0.06, -0.22],
+    right: {
+      handPos: [0.075, 0.0, 0.0],
+      handRot: [0.35, -0.45, -0.45],
+      shoulderTarget: [0.24, -0.16, 0.36],
+      proxCurl: -0.42,
+      distCurl: -0.36,
+      thumbRot: [0.16, -0.22, 0.14],
+    },
+    left: {
+      handPos: [-0.075, 0.0, 0.0],
+      handRot: [0.35, 0.45, 0.45],
+      shoulderTarget: [-0.24, -0.16, 0.36],
+      proxCurl: -0.42,
+      distCurl: -0.36,
+      thumbRot: [0.16, 0.22, -0.14],
+    },
+    showBlade: false,
+  },
+};
+
+function applyPose(name) {
+  const p = poses[name];
+  if (!p) return;
+  viewRig.position.set(p.rigPos[0], p.rigPos[1], p.rigPos[2]);
+  rightArm.setHold(p.right);
+  leftArm.setHold(p.left);
+  previewKarambit.visible = Boolean(p.showBlade);
+}
+
+function setCameraView(camMode) {
+  if (camMode === 'fps') {
+    camera.position.set(0.0, 0.0, 0.02);
+    controls.target.set(0.02, -0.12, -0.32);
+  } else if (camMode === 'closeup') {
+    camera.position.set(0.0, 0.02, -0.06);
+    controls.target.set(0.06, -0.12, -0.28);
+  } else if (camMode === 'side') {
+    camera.position.set(-0.26, 0.02, -0.12);
+    controls.target.set(0.04, -0.12, -0.26);
+  }
+  controls.update();
+}
+
+const themes = {
+  omen: {
+    sleeveTint: '#b8c0ce',
+    armorTint: '#3e4554',
+    sheen: '#475569',
+    stitch: '#6366f1',
+  },
+  specops: {
+    sleeveTint: '#a6b0a0',
+    armorTint: '#363b38',
+    sheen: '#525b50',
+    stitch: '#38bdf8',
+  },
+};
+
+function applyTheme(tName) {
+  const th = themes[tName];
+  if (!th) return;
+  sleeveMat.color.set(th.sleeveTint);
+  sleeveMat.sheenColor.set(th.sheen);
+  armorPlateMat.color.set(th.armorTint);
+  stitchMat.color.set(th.stitch);
+}
+
+applyPose('karambit');
+setCameraView('fps');
+
+document.querySelectorAll('[data-pose]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('[data-pose]').forEach((b) => b.classList.remove('active'));
+    btn.classList.add('active');
+    applyPose(btn.dataset.pose);
+    if (btn.dataset.pose === 'inspect') {
+      camera.position.set(0.0, 0.04, -0.02);
+      controls.target.set(0.0, -0.04, -0.24);
+      controls.update();
+    }
+  });
+});
+
+document.querySelectorAll('[data-cam]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('[data-cam]').forEach((b) => b.classList.remove('active'));
+    btn.classList.add('active');
+    setCameraView(btn.dataset.cam);
+  });
+});
+
+document.querySelectorAll('[data-theme]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('[data-theme]').forEach((b) => b.classList.remove('active'));
+    btn.classList.add('active');
+    applyTheme(btn.dataset.theme);
+  });
+});
+
+let t = 0;
+function animate() {
+  requestAnimationFrame(animate);
+  t += 0.016;
+  viewRig.position.y += Math.sin(t * 1.4) * 0.00004;
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+window.addEventListener('resize', () => {
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w, h);
+});
+</script>
+</body>
+</html>

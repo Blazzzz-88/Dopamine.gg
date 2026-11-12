@@ -278,6 +278,80 @@ abstract class ValorantKnifeAnimatorBase implements KnifeAnimator {
   }
 }
 
+/**
+ * Shared forward-thrust ("planter le couteau") attack animation using ONLY the right knife hand.
+ * Leaves the left arm (`leftArmPos`, `leftArmRot`) and whole-rig rotation/position untouched so
+ * the off-hand never swings or participates in the knife strike.
+ */
+function evaluateStabAttack(
+  state: 'attack1' | 'attack2',
+  timer: number,
+  knifeType: KnifeType,
+  comboIndex: number,
+  p: KnifeAnimPose
+): KnifeAnimState {
+  const isHeavy = state === 'attack2';
+  const dur = isHeavy ? 0.48 : 0.34;
+  const t = timer / dur;
+  if (t >= 1) return 'idle';
+
+  const isKarambit = knifeType === 'karambit';
+  const alt = !isHeavy && comboIndex === 1 ? -1 : 1;
+
+  // Wind-up & forward plunge coordinates aimed directly toward center crosshair
+  const windPos: [number, number, number] = isHeavy
+    ? [0.044, 0.022, 0.088]
+    : [0.032, -0.014, 0.066];
+  const windRot: [number, number, number] = isKarambit
+    ? [0.22, -0.10, -0.14]
+    : [0.20, 0.14 * alt, 0.22 * alt];
+
+  const thrustPos: [number, number, number] = isHeavy
+    ? [-0.125, 0.056, -0.265]
+    : [-0.102, 0.046, -0.225];
+  const thrustRot: [number, number, number] = isKarambit
+    ? [-0.52, 0.18, 0.22]
+    : [-0.42, -0.12 * alt, 0.36 * alt];
+
+  const windEnd = isHeavy ? 0.22 : 0.17;
+  const thrustEnd = isHeavy ? 0.45 : 0.40;
+  const holdEnd = isHeavy ? 0.56 : 0.44;
+
+  if (t < windEnd) {
+    const k = easeOutCubic(t / windEnd);
+    p.rightArmPos.set(windPos[0] * k, windPos[1] * k, windPos[2] * k);
+    p.rightWristRot.set(windRot[0] * k, windRot[1] * k, windRot[2] * k);
+  } else if (t < thrustEnd) {
+    const k = easeOutQuart((t - windEnd) / (thrustEnd - windEnd));
+    p.rightArmPos.set(
+      THREE.MathUtils.lerp(windPos[0], thrustPos[0], k),
+      THREE.MathUtils.lerp(windPos[1], thrustPos[1], k),
+      THREE.MathUtils.lerp(windPos[2], thrustPos[2], k)
+    );
+    p.rightWristRot.set(
+      THREE.MathUtils.lerp(windRot[0], thrustRot[0], k),
+      THREE.MathUtils.lerp(windRot[1], thrustRot[1], k),
+      THREE.MathUtils.lerp(windRot[2], thrustRot[2], k)
+    );
+    const impact = Math.sin(k * Math.PI);
+    p.cameraPunch.pitch = (isHeavy ? -0.018 : -0.010) * impact;
+    p.cameraPunch.roll = (isHeavy ? -0.008 : -0.005 * alt) * impact;
+  } else if (t < holdEnd) {
+    // Brief weighted settle while the blade is planted in the target
+    const k = (t - thrustEnd) / (holdEnd - thrustEnd);
+    const settleZ = THREE.MathUtils.lerp(thrustPos[2], thrustPos[2] + 0.024, k);
+    p.rightArmPos.set(thrustPos[0], thrustPos[1], settleZ);
+    p.rightWristRot.set(thrustRot[0], thrustRot[1], thrustRot[2]);
+  } else {
+    const k = 1 - easeOutCubic((t - holdEnd) / (1 - holdEnd));
+    const startZ = thrustPos[2] + 0.024;
+    p.rightArmPos.set(thrustPos[0] * k, thrustPos[1] * k, startZ * k);
+    p.rightWristRot.set(thrustRot[0] * k, thrustRot[1] * k, thrustRot[2] * k);
+  }
+
+  return state;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. KARAMBIT (Valorant Champions / Reaver / Prime Karambit)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -370,120 +444,9 @@ class KarambitAnimator extends ValorantKnifeAnimatorBase {
         return 'inspect';
       }
 
-      case 'attack1': {
-        const dur = 0.31;
-        const t = timer / dur;
-        if (t >= 1) return 'idle';
-        const forehand = this.comboIndex === 0;
-        if (forehand) {
-          if (t < 0.18) {
-            const k = easeOutCubic(t / 0.18);
-            p.rightArmPos.set(0.048 * k, 0.020 * k, 0.020 * k);
-            p.rightWristRot.set(0.14 * k, -0.26 * k, -0.24 * k);
-            p.rigRot.set(0.05 * k, -0.10 * k, -0.08 * k);
-          } else if (t < 0.44) {
-            const k = easeOutQuart((t - 0.18) / 0.26);
-            p.rightArmPos.set(
-              THREE.MathUtils.lerp(0.048, -0.145, k),
-              THREE.MathUtils.lerp(0.020, -0.048, k),
-              THREE.MathUtils.lerp(0.020, -0.085, k)
-            );
-            p.rightWristRot.set(
-              THREE.MathUtils.lerp(0.14, -0.24, k),
-              THREE.MathUtils.lerp(-0.26, 0.54, k),
-              THREE.MathUtils.lerp(-0.24, 0.42, k)
-            );
-            p.rigRot.set(
-              THREE.MathUtils.lerp(0.05, -0.12, k),
-              THREE.MathUtils.lerp(-0.10, 0.24, k),
-              THREE.MathUtils.lerp(-0.08, 0.20, k)
-            );
-            p.leftArmPos.set(-0.04 * k, -0.02 * k, 0.04 * k);
-            p.cameraPunch.pitch = -0.008 * Math.sin(k * Math.PI);
-            p.cameraPunch.roll = 0.010 * Math.sin(k * Math.PI);
-          } else {
-            const k = 1 - easeOutCubic((t - 0.44) / 0.56);
-            p.rightArmPos.set(-0.145 * k, -0.048 * k, -0.085 * k);
-            p.rightWristRot.set(-0.24 * k, 0.54 * k, 0.42 * k);
-            p.rigRot.set(-0.12 * k, 0.24 * k, 0.20 * k);
-            p.leftArmPos.set(-0.04 * k, -0.02 * k, 0.04 * k);
-          }
-        } else {
-          if (t < 0.17) {
-            const k = easeOutCubic(t / 0.17);
-            p.rightArmPos.set(-0.095 * k, -0.020 * k, 0.015 * k);
-            p.rightWristRot.set(-0.06 * k, 0.34 * k, 0.32 * k);
-            p.rigRot.set(-0.04 * k, 0.16 * k, 0.14 * k);
-          } else if (t < 0.44) {
-            const k = easeOutQuart((t - 0.17) / 0.27);
-            p.rightArmPos.set(
-              THREE.MathUtils.lerp(-0.095, 0.072, k),
-              THREE.MathUtils.lerp(-0.020, 0.024, k),
-              THREE.MathUtils.lerp(0.015, -0.075, k)
-            );
-            p.rightWristRot.set(
-              THREE.MathUtils.lerp(-0.06, -0.18, k),
-              THREE.MathUtils.lerp(0.34, -0.36, k),
-              THREE.MathUtils.lerp(0.32, -0.34, k)
-            );
-            p.rigRot.set(
-              THREE.MathUtils.lerp(-0.04, -0.08, k),
-              THREE.MathUtils.lerp(0.16, -0.18, k),
-              THREE.MathUtils.lerp(0.14, -0.16, k)
-            );
-            p.leftArmPos.set(-0.03 * k, -0.015 * k, 0.03 * k);
-            p.cameraPunch.pitch = -0.007 * Math.sin(k * Math.PI);
-            p.cameraPunch.roll = -0.009 * Math.sin(k * Math.PI);
-          } else {
-            const k = 1 - easeOutCubic((t - 0.44) / 0.56);
-            p.rightArmPos.set(0.072 * k, 0.024 * k, -0.075 * k);
-            p.rightWristRot.set(-0.18 * k, -0.36 * k, -0.34 * k);
-            p.rigRot.set(-0.08 * k, -0.18 * k, -0.16 * k);
-            p.leftArmPos.set(-0.03 * k, -0.015 * k, 0.03 * k);
-          }
-        }
-        return 'attack1';
-      }
-
-      case 'attack2': {
-        const dur = 0.44;
-        const t = timer / dur;
-        if (t >= 1) return 'idle';
-        if (t < 0.24) {
-          const k = easeOutCubic(t / 0.24);
-          p.rightArmPos.set(0.035 * k, 0.085 * k, 0.030 * k);
-          p.rightWristRot.set(0.34 * k, -0.14 * k, -0.18 * k);
-          p.rigRot.set(0.16 * k, -0.08 * k, -0.10 * k);
-          p.leftArmPos.set(-0.028 * k, 0.02 * k, 0.02 * k);
-        } else if (t < 0.48) {
-          const k = easeOutQuart((t - 0.24) / 0.24);
-          p.rightArmPos.set(
-            THREE.MathUtils.lerp(0.035, -0.085, k),
-            THREE.MathUtils.lerp(0.085, -0.095, k),
-            THREE.MathUtils.lerp(0.030, -0.125, k)
-          );
-          p.rightWristRot.set(
-            THREE.MathUtils.lerp(0.34, -0.56, k),
-            THREE.MathUtils.lerp(-0.14, 0.22, k),
-            THREE.MathUtils.lerp(-0.18, 0.24, k)
-          );
-          p.rigRot.set(
-            THREE.MathUtils.lerp(0.16, -0.24, k),
-            THREE.MathUtils.lerp(-0.08, 0.14, k),
-            THREE.MathUtils.lerp(-0.10, 0.14, k)
-          );
-          p.leftArmPos.set(-0.048 * k, -0.035 * k, 0.045 * k);
-          p.cameraPunch.pitch = -0.016 * Math.sin(k * Math.PI);
-          p.cameraPunch.roll = -0.012 * Math.sin(k * Math.PI);
-        } else {
-          const k = 1 - easeOutCubic((t - 0.48) / 0.52);
-          p.rightArmPos.set(-0.085 * k, -0.095 * k, -0.125 * k);
-          p.rightWristRot.set(-0.56 * k, 0.22 * k, 0.24 * k);
-          p.rigRot.set(-0.24 * k, 0.14 * k, 0.14 * k);
-          p.leftArmPos.set(-0.048 * k, -0.035 * k, 0.045 * k);
-        }
-        return 'attack2';
-      }
+      case 'attack1':
+      case 'attack2':
+        return evaluateStabAttack(state, timer, this.knifeType, this.comboIndex, p);
     }
   }
 }
@@ -571,121 +534,9 @@ class BaionnetteAnimator extends ValorantKnifeAnimatorBase {
         return 'inspect';
       }
 
-      case 'attack1': {
-        const dur = 0.36;
-        const t = timer / dur;
-        if (t >= 1) return 'idle';
-        const slashDown = this.comboIndex === 0;
-        if (slashDown) {
-          if (t < 0.18) {
-            const k = easeOutCubic(t / 0.18);
-            p.rightArmPos.set(0.055 * k, 0.042 * k, 0.028 * k);
-            p.rightWristRot.set(0.24 * k, -0.24 * k, -0.28 * k);
-            p.rigRot.set(0.08 * k, -0.10 * k, -0.14 * k);
-          } else if (t < 0.44) {
-            const k = easeOutQuart((t - 0.18) / 0.26);
-            p.rightArmPos.set(
-              THREE.MathUtils.lerp(0.055, -0.155, k),
-              THREE.MathUtils.lerp(0.042, -0.062, k),
-              THREE.MathUtils.lerp(0.028, -0.095, k)
-            );
-            p.rightWristRot.set(
-              THREE.MathUtils.lerp(0.24, -0.44, k),
-              THREE.MathUtils.lerp(-0.24, 0.48, k),
-              THREE.MathUtils.lerp(-0.28, 0.36, k)
-            );
-            p.rigRot.set(
-              THREE.MathUtils.lerp(0.08, -0.14, k),
-              THREE.MathUtils.lerp(-0.10, 0.24, k),
-              THREE.MathUtils.lerp(-0.14, 0.22, k)
-            );
-            p.leftArmPos.set(-0.045 * k, -0.02 * k, 0.04 * k);
-            p.cameraPunch.pitch = -0.009 * Math.sin(k * Math.PI);
-            p.cameraPunch.roll = 0.011 * Math.sin(k * Math.PI);
-          } else {
-            const k = 1 - easeOutCubic((t - 0.44) / 0.56);
-            p.rightArmPos.set(-0.155 * k, -0.062 * k, -0.095 * k);
-            p.rightWristRot.set(-0.44 * k, 0.48 * k, 0.36 * k);
-            p.rigRot.set(-0.14 * k, 0.24 * k, 0.22 * k);
-            p.leftArmPos.set(-0.045 * k, -0.02 * k, 0.04 * k);
-          }
-        } else {
-          if (t < 0.17) {
-            const k = easeOutCubic(t / 0.17);
-            p.rightArmPos.set(-0.115 * k, -0.045 * k, 0.018 * k);
-            p.rightWristRot.set(-0.18 * k, 0.36 * k, 0.38 * k);
-            p.rigRot.set(-0.06 * k, 0.16 * k, 0.18 * k);
-          } else if (t < 0.44) {
-            const k = easeOutQuart((t - 0.17) / 0.27);
-            p.rightArmPos.set(
-              THREE.MathUtils.lerp(-0.115, 0.068, k),
-              THREE.MathUtils.lerp(-0.045, 0.036, k),
-              THREE.MathUtils.lerp(0.018, -0.085, k)
-            );
-            p.rightWristRot.set(
-              THREE.MathUtils.lerp(-0.18, 0.18, k),
-              THREE.MathUtils.lerp(0.36, -0.34, k),
-              THREE.MathUtils.lerp(0.38, -0.32, k)
-            );
-            p.rigRot.set(
-              THREE.MathUtils.lerp(-0.06, 0.08, k),
-              THREE.MathUtils.lerp(0.16, -0.16, k),
-              THREE.MathUtils.lerp(0.18, -0.16, k)
-            );
-            p.leftArmPos.set(-0.03 * k, -0.015 * k, 0.03 * k);
-            p.cameraPunch.pitch = 0.008 * Math.sin(k * Math.PI);
-            p.cameraPunch.roll = -0.010 * Math.sin(k * Math.PI);
-          } else {
-            const k = 1 - easeOutCubic((t - 0.44) / 0.56);
-            p.rightArmPos.set(0.068 * k, 0.036 * k, -0.085 * k);
-            p.rightWristRot.set(0.18 * k, -0.34 * k, -0.32 * k);
-            p.rigRot.set(0.08 * k, -0.16 * k, -0.16 * k);
-            p.leftArmPos.set(-0.03 * k, -0.015 * k, 0.03 * k);
-          }
-        }
-        return 'attack1';
-      }
-
-      case 'attack2': {
-        // Estocade puissante vers l'avant (poing rigide aligné à la lame)
-        const dur = 0.46;
-        const t = timer / dur;
-        if (t >= 1) return 'idle';
-        if (t < 0.22) {
-          const k = easeInOutCubic(t / 0.22);
-          p.rightArmPos.set(0.025 * k, -0.015 * k, 0.062 * k);
-          p.rightWristRot.set(-0.18 * k, 0.06 * k, 0.28 * k);
-          p.rigRot.set(0.04 * k, -0.05 * k, 0.08 * k);
-          p.leftArmPos.set(-0.02 * k, -0.01 * k, 0.025 * k);
-        } else if (t < 0.45) {
-          const k = easeOutQuart((t - 0.22) / 0.23);
-          p.rightArmPos.set(
-            THREE.MathUtils.lerp(0.025, -0.065, k),
-            THREE.MathUtils.lerp(-0.015, 0.024, k),
-            THREE.MathUtils.lerp(0.062, -0.165, k)
-          );
-          p.rightWristRot.set(
-            THREE.MathUtils.lerp(-0.18, -0.32, k),
-            THREE.MathUtils.lerp(0.06, 0.16, k),
-            THREE.MathUtils.lerp(0.28, 0.44, k)
-          );
-          p.rigRot.set(
-            THREE.MathUtils.lerp(0.04, -0.04, k),
-            THREE.MathUtils.lerp(-0.05, 0.10, k),
-            THREE.MathUtils.lerp(0.08, 0.14, k)
-          );
-          p.leftArmPos.set(-0.045 * k, -0.025 * k, 0.05 * k);
-          p.cameraPunch.pitch = 0.012 * Math.sin(k * Math.PI);
-          p.cameraPunch.roll = -0.013 * Math.sin(k * Math.PI);
-        } else {
-          const k = 1 - easeOutCubic((t - 0.45) / 0.55);
-          p.rightArmPos.set(-0.065 * k, 0.024 * k, -0.165 * k);
-          p.rightWristRot.set(-0.32 * k, 0.16 * k, 0.44 * k);
-          p.rigRot.set(-0.04 * k, 0.10 * k, 0.14 * k);
-          p.leftArmPos.set(-0.045 * k, -0.025 * k, 0.05 * k);
-        }
-        return 'attack2';
-      }
+      case 'attack1':
+      case 'attack2':
+        return evaluateStabAttack(state, timer, this.knifeType, this.comboIndex, p);
     }
   }
 }
@@ -774,122 +625,9 @@ class KatanaAnimator extends ValorantKnifeAnimatorBase {
         return 'inspect';
       }
 
-      case 'attack1': {
-        // Kesa-giri japonais croisés (ample, fluide, lame toujours tenue fermement)
-        const dur = 0.38;
-        const t = timer / dur;
-        if (t >= 1) return 'idle';
-        const forehand = this.comboIndex === 0;
-        if (forehand) {
-          if (t < 0.20) {
-            const k = easeOutCubic(t / 0.20);
-            p.rightArmPos.set(0.065 * k, 0.055 * k, 0.028 * k);
-            p.rightWristRot.set(0.28 * k, -0.28 * k, -0.34 * k);
-            p.rigRot.set(0.10 * k, -0.12 * k, -0.16 * k);
-          } else if (t < 0.46) {
-            const k = easeOutQuart((t - 0.20) / 0.26);
-            p.rightArmPos.set(
-              THREE.MathUtils.lerp(0.065, -0.175, k),
-              THREE.MathUtils.lerp(0.055, -0.075, k),
-              THREE.MathUtils.lerp(0.028, -0.095, k)
-            );
-            p.rightWristRot.set(
-              THREE.MathUtils.lerp(0.28, -0.46, k),
-              THREE.MathUtils.lerp(-0.28, 0.54, k),
-              THREE.MathUtils.lerp(-0.34, 0.42, k)
-            );
-            p.rigRot.set(
-              THREE.MathUtils.lerp(0.10, -0.16, k),
-              THREE.MathUtils.lerp(-0.12, 0.26, k),
-              THREE.MathUtils.lerp(-0.16, 0.24, k)
-            );
-            p.leftArmPos.set(-0.045 * k, -0.025 * k, 0.04 * k);
-            p.cameraPunch.pitch = -0.010 * Math.sin(k * Math.PI);
-            p.cameraPunch.roll = 0.013 * Math.sin(k * Math.PI);
-          } else {
-            const k = 1 - easeOutCubic((t - 0.46) / 0.54);
-            p.rightArmPos.set(-0.175 * k, -0.075 * k, -0.095 * k);
-            p.rightWristRot.set(-0.46 * k, 0.54 * k, 0.42 * k);
-            p.rigRot.set(-0.16 * k, 0.26 * k, 0.24 * k);
-            p.leftArmPos.set(-0.045 * k, -0.025 * k, 0.04 * k);
-          }
-        } else {
-          if (t < 0.18) {
-            const k = easeOutCubic(t / 0.18);
-            p.rightArmPos.set(-0.135 * k, -0.055 * k, 0.02 * k);
-            p.rightWristRot.set(-0.22 * k, 0.40 * k, 0.42 * k);
-            p.rigRot.set(-0.08 * k, 0.18 * k, 0.20 * k);
-          } else if (t < 0.46) {
-            const k = easeOutQuart((t - 0.18) / 0.28);
-            p.rightArmPos.set(
-              THREE.MathUtils.lerp(-0.135, 0.075, k),
-              THREE.MathUtils.lerp(-0.055, 0.048, k),
-              THREE.MathUtils.lerp(0.02, -0.088, k)
-            );
-            p.rightWristRot.set(
-              THREE.MathUtils.lerp(-0.22, 0.24, k),
-              THREE.MathUtils.lerp(0.40, -0.38, k),
-              THREE.MathUtils.lerp(0.42, -0.38, k)
-            );
-            p.rigRot.set(
-              THREE.MathUtils.lerp(-0.08, 0.10, k),
-              THREE.MathUtils.lerp(0.18, -0.18, k),
-              THREE.MathUtils.lerp(0.20, -0.18, k)
-            );
-            p.leftArmPos.set(-0.035 * k, -0.015 * k, 0.035 * k);
-            p.cameraPunch.pitch = 0.009 * Math.sin(k * Math.PI);
-            p.cameraPunch.roll = -0.011 * Math.sin(k * Math.PI);
-          } else {
-            const k = 1 - easeOutCubic((t - 0.46) / 0.54);
-            p.rightArmPos.set(0.075 * k, 0.048 * k, -0.088 * k);
-            p.rightWristRot.set(0.24 * k, -0.38 * k, -0.38 * k);
-            p.rigRot.set(0.10 * k, -0.18 * k, -0.18 * k);
-            p.leftArmPos.set(-0.035 * k, -0.015 * k, 0.035 * k);
-          }
-        }
-        return 'attack1';
-      }
-
-      case 'attack2': {
-        // Grand coup tranchant diagonal à pleine amplitude du haut-droite vers bas-gauche
-        const dur = 0.50;
-        const t = timer / dur;
-        if (t >= 1) return 'idle';
-        if (t < 0.26) {
-          const k = easeOutCubic(t / 0.26);
-          p.rightArmPos.set(0.048 * k, 0.095 * k, 0.042 * k);
-          p.rightWristRot.set(0.42 * k, -0.18 * k, -0.24 * k);
-          p.rigRot.set(0.18 * k, -0.10 * k, -0.12 * k);
-          p.leftArmPos.set(-0.025 * k, 0.022 * k, 0.02 * k);
-        } else if (t < 0.50) {
-          const k = easeOutQuart((t - 0.26) / 0.24);
-          p.rightArmPos.set(
-            THREE.MathUtils.lerp(0.048, -0.145, k),
-            THREE.MathUtils.lerp(0.095, -0.105, k),
-            THREE.MathUtils.lerp(0.042, -0.135, k)
-          );
-          p.rightWristRot.set(
-            THREE.MathUtils.lerp(0.42, -0.64, k),
-            THREE.MathUtils.lerp(-0.18, 0.34, k),
-            THREE.MathUtils.lerp(-0.24, 0.36, k)
-          );
-          p.rigRot.set(
-            THREE.MathUtils.lerp(0.18, -0.28, k),
-            THREE.MathUtils.lerp(-0.10, 0.22, k),
-            THREE.MathUtils.lerp(-0.12, 0.22, k)
-          );
-          p.leftArmPos.set(-0.055 * k, -0.04 * k, 0.05 * k);
-          p.cameraPunch.pitch = -0.018 * Math.sin(k * Math.PI);
-          p.cameraPunch.roll = 0.015 * Math.sin(k * Math.PI);
-        } else {
-          const k = 1 - easeOutCubic((t - 0.50) / 0.50);
-          p.rightArmPos.set(-0.145 * k, -0.105 * k, -0.135 * k);
-          p.rightWristRot.set(-0.64 * k, 0.34 * k, 0.36 * k);
-          p.rigRot.set(-0.28 * k, 0.22 * k, 0.22 * k);
-          p.leftArmPos.set(-0.055 * k, -0.04 * k, 0.05 * k);
-        }
-        return 'attack2';
-      }
+      case 'attack1':
+      case 'attack2':
+        return evaluateStabAttack(state, timer, this.knifeType, this.comboIndex, p);
     }
   }
 }
@@ -985,87 +723,9 @@ class DaggerAnimator extends ValorantKnifeAnimatorBase {
         return 'inspect';
       }
 
-      case 'attack1': {
-        const dur = 0.31;
-        const t = timer / dur;
-        if (t >= 1) return 'idle';
-        const rightToLeft = this.comboIndex === 0;
-        const s = rightToLeft ? 1 : -1;
-        if (t < 0.16) {
-          const k = easeOutCubic(t / 0.16);
-          p.rightArmPos.set(0.052 * s * k, 0.014 * k, 0.022 * k);
-          p.rightWristRot.set(0.08 * k, -0.24 * s * k, -0.32 * s * k);
-          p.rigRot.set(0.04 * k, -0.10 * s * k, -0.12 * s * k);
-        } else if (t < 0.42) {
-          const k = easeOutQuart((t - 0.16) / 0.26);
-          p.rightArmPos.set(
-            THREE.MathUtils.lerp(0.052 * s, -0.145 * s, k),
-            THREE.MathUtils.lerp(0.014, -0.025, k),
-            THREE.MathUtils.lerp(0.022, -0.085, k)
-          );
-          p.rightWristRot.set(
-            THREE.MathUtils.lerp(0.08, -0.24, k),
-            THREE.MathUtils.lerp(-0.24 * s, 0.46 * s, k),
-            THREE.MathUtils.lerp(-0.32 * s, 0.38 * s, k)
-          );
-          p.rigRot.set(
-            -0.06 * k,
-            THREE.MathUtils.lerp(-0.10 * s, 0.22 * s, k),
-            THREE.MathUtils.lerp(-0.12 * s, 0.18 * s, k)
-          );
-          p.leftArmPos.set(-0.036 * k, -0.018 * k, 0.035 * k);
-          p.cameraPunch.pitch = -0.006 * Math.sin(k * Math.PI);
-          p.cameraPunch.roll = 0.009 * s * Math.sin(k * Math.PI);
-        } else {
-          const k = 1 - easeOutCubic((t - 0.42) / 0.58);
-          p.rightArmPos.set(-0.145 * s * k, -0.025 * k, -0.085 * k);
-          p.rightWristRot.set(-0.24 * k, 0.46 * s * k, 0.38 * s * k);
-          p.rigRot.set(-0.06 * k, 0.22 * s * k, 0.18 * s * k);
-          p.leftArmPos.set(-0.036 * k, -0.018 * k, 0.035 * k);
-        }
-        return 'attack1';
-      }
-
-      case 'attack2': {
-        // Coup lourd perforant droit vers l'avant (poing verrouillé dans l'axe)
-        const dur = 0.44;
-        const t = timer / dur;
-        if (t >= 1) return 'idle';
-        if (t < 0.22) {
-          const k = easeInOutCubic(t / 0.22);
-          p.rightArmPos.set(0.03 * k, 0.022 * k, 0.055 * k);
-          p.rightWristRot.set(0.18 * k, -0.10 * k, 0.22 * k);
-          p.rigRot.set(0.08 * k, -0.06 * k, 0.06 * k);
-          p.leftArmPos.set(-0.022 * k, 0.01 * k, 0.022 * k);
-        } else if (t < 0.45) {
-          const k = easeOutQuart((t - 0.22) / 0.23);
-          p.rightArmPos.set(
-            THREE.MathUtils.lerp(0.03, -0.072, k),
-            THREE.MathUtils.lerp(0.022, -0.024, k),
-            THREE.MathUtils.lerp(0.055, -0.165, k)
-          );
-          p.rightWristRot.set(
-            THREE.MathUtils.lerp(0.18, -0.36, k),
-            THREE.MathUtils.lerp(-0.10, 0.16, k),
-            THREE.MathUtils.lerp(0.22, 0.36, k)
-          );
-          p.rigRot.set(
-            THREE.MathUtils.lerp(0.08, -0.12, k),
-            THREE.MathUtils.lerp(-0.06, 0.12, k),
-            THREE.MathUtils.lerp(0.06, 0.12, k)
-          );
-          p.leftArmPos.set(-0.045 * k, -0.028 * k, 0.048 * k);
-          p.cameraPunch.pitch = -0.013 * Math.sin(k * Math.PI);
-          p.cameraPunch.roll = -0.011 * Math.sin(k * Math.PI);
-        } else {
-          const k = 1 - easeOutCubic((t - 0.45) / 0.55);
-          p.rightArmPos.set(-0.072 * k, -0.024 * k, -0.165 * k);
-          p.rightWristRot.set(-0.36 * k, 0.16 * k, 0.36 * k);
-          p.rigRot.set(-0.12 * k, 0.12 * k, 0.12 * k);
-          p.leftArmPos.set(-0.045 * k, -0.028 * k, 0.048 * k);
-        }
-        return 'attack2';
-      }
+      case 'attack1':
+      case 'attack2':
+        return evaluateStabAttack(state, timer, this.knifeType, this.comboIndex, p);
     }
   }
 }
@@ -1138,8 +798,8 @@ export function alignBladeWeaponToFist(
 
   let mTarget: THREE.Matrix4;
   if (archetype === 'karambit') {
-    // Prise inversée : manche coaxial aux doigts (pinky -> index), lame courbée vers l'avant-gauche et le haut
-    const desiredBladeRaw = new THREE.Vector3(-0.70, 0.44, -0.56).normalize();
+    // Prise inversée : manche coaxial aux doigts (pinky -> index), face plate posée sur la paume et tranchant vers l'avant-gauche
+    const desiredBladeRaw = new THREE.Vector3(-0.62, 0.34, -0.71).normalize();
     const handBladeDir = desiredBladeRaw
       .clone()
       .addScaledVector(handHandleAxis, -desiredBladeRaw.dot(handHandleAxis))
@@ -1163,7 +823,7 @@ export function alignBladeWeaponToFist(
 
   const fitScale =
     archetype === 'karambit' && meta.handleThicknessLocal && meta.handleThicknessLocal > 0.2
-      ? THREE.MathUtils.clamp(0.040 / meta.handleThicknessLocal, 0.030, weaponCfg.scale)
+      ? THREE.MathUtils.clamp(0.029 / meta.handleThicknessLocal, 0.026, 0.042)
       : weaponCfg.scale;
 
   weaponGroup.quaternion.copy(q);

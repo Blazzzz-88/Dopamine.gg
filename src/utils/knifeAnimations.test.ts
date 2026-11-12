@@ -344,4 +344,26 @@ describe('knifeAnimations — verrouillage strict en main, style Valorant et zé
     expect(katana.getState()).toBe('idle');
     expect(dague.getState()).toBe('idle');
   });
+
+  it('attaque en estocade vers l’avant (planter le couteau) uniquement avec la main droite sans bouger la main gauche', () => {
+    const types: KnifeType[] = ['karambit', 'baionnette', 'katana', 'dague'];
+    for (const kType of types) {
+      for (const heavy of [false, true]) {
+        const anim = createKnifeAnimator(kType);
+        anim.triggerAttack(heavy);
+        let minRightZ = 0;
+        for (let step = 0; step < 35; step++) {
+          const pose = anim.update(1 / 60, step * 16.6);
+          if (pose.rightArmPos.z < minRightZ) minRightZ = pose.rightArmPos.z;
+          if (anim.getState() === 'attack1' || anim.getState() === 'attack2') {
+            expect(pose.leftArmPos.length()).toBeLessThan(1e-6);
+            expect(Math.abs(pose.leftArmRot.x) + Math.abs(pose.leftArmRot.y) + Math.abs(pose.leftArmRot.z)).toBeLessThan(1e-6);
+            expect(pose.rigPos.length()).toBeLessThan(1e-6);
+            expect(Math.abs(pose.rigRot.x) + Math.abs(pose.rigRot.y) + Math.abs(pose.rigRot.z)).toBeLessThan(1e-6);
+          }
+        }
+        expect(minRightZ).toBeLessThan(-0.18);
+      }
+    }
+  });
 });

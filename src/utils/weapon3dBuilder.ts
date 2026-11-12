@@ -1800,15 +1800,19 @@ export function buildSculptedMeshData(
     const ringWorldX = ringCnt > 12 ? toWorldX(ringSumX / ringCnt) : xrFallback;
     const ringWorldY = ringCnt > 12 ? toWorldY(ringSumY / ringCnt) : yrFallback;
 
-    const [x1, y1, th1] = sampleColSpan(0.52);
-    const [xm, ym, th2] = sampleColSpan(0.62);
+    const [x1, y1, th1] = sampleColSpan(0.56);
+    const [, , th2] = sampleColSpan(0.74);
     const dx = ringWorldX - x1;
     const dy = ringWorldY - y1;
     const len = Math.hypot(dx, dy) || 1;
     const hx = dx / len;
     const hy = dy / len;
+    // Anchor fist grip at a uniform offset behind the ring center so the thumb sits inside the ring on every Karambit skin
+    const gripBackFromRing = 0.62;
+    const gripX = ringWorldX - hx * gripBackFromRing;
+    const gripY = ringWorldY - hy * gripBackFromRing;
     gripMeta = {
-      gripLocalPos: [xm, ym, 0],
+      gripLocalPos: [gripX, gripY, 0],
       handleAxis: [hx, hy, 0],
       bladeDir: [hy, -hx, 0],
       ringLocalPos: [ringWorldX, ringWorldY, 0],
