@@ -54,8 +54,10 @@ import {
   CloudBaseline,
   CloudProfileRow,
   hasCloudSyncedDiff,
+  hydrateInventoryFromCatalog,
   mergeServerEditsIntoLocalState,
   parseSafeCloudNumber,
+  sanitizeInventoryForCloud,
 } from './utils/cloudSync';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 import {
@@ -205,7 +207,7 @@ export function App() {
 
         const payload = {
           credits: stateToWrite.balance,
-          inventory: stateToWrite.inventory,
+          inventory: sanitizeInventoryForCloud(stateToWrite.inventory),
           drop_history: stateToWrite.history,
           stats: stateToWrite.stats,
           storage_limit: stateToWrite.inventoryCapacity,
@@ -284,7 +286,9 @@ export function App() {
         const cloudState: PersistedState = {
           ...persistedRef.current,
           balance: parseSafeCloudNumber(data.credits, 3000),
-          inventory: Array.isArray(data.inventory) ? data.inventory : [],
+          inventory: Array.isArray(data.inventory)
+            ? hydrateInventoryFromCatalog(data.inventory)
+            : [],
           inventoryCapacity: parseSafeCloudNumber(data.storage_limit, 25),
           history: Array.isArray(data.drop_history) ? data.drop_history : persistedRef.current.history,
           stats:
@@ -416,7 +420,7 @@ export function App() {
       if (document.visibilityState === 'visible') {
         void pullRemoteUpdates();
       }
-    }, 12000);
+    }, 45000);
 
     return () => {
       clearInterval(interval);

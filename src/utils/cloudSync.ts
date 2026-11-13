@@ -1,4 +1,5 @@
-import { DropHistoryItem, InventoryItem, PlayerStats } from '../types/casino';
+import { CRATES } from '../data/catalog';
+import { DropHistoryItem, InventoryItem, PlayerStats, SkinDefinition } from '../types/casino';
 import { PersistedState } from './storage';
 
 export interface CloudProfileRow {
@@ -15,10 +16,53 @@ export interface CloudProfileRow {
 export interface CloudBaseline {
   credits: number;
   storageLimit: number;
-  inventoryJson: string;
+  inventorySignature: string;
   inventoryIds: string[];
-  historyJson: string;
+  historyCount: number;
   statsJson: string;
+}
+
+// Cache rapide pour retrouver la définition d'un skin par skinId ou combinaison nom/crate
+const SKIN_LOOKUP_MAP = new Map<string, SkinDefinition>();
+for (const crate of CRATES) {
+  for (const s of crate.skins) {
+    SKIN_LOOKUP_MAP.set(s.id, s);
+    SKIN_LOOKUP_MAP.set(`${crate.id}::${s.name}`, s);
+    SKIN_LOOKUP_MAP.set(`${s.weaponName}::${s.name}`, s);
+  }
+}
+
+/**
+ * Allège l'inventaire avant envoi à Supabase en retirant les champs lourds (comme 'image' en base64)
+ * qui sont déjà présents localement dans l'application compilée.
+ */
+export function sanitizeItemForCloud(item: InventoryItem): InventoryItem {
+  if (!item.image) return item;
+  const { image: _omitted, ...leanItem } = item;
+  return leanItem as InventoryItem;
+}
+
+/**
+ * Ré-attache les images locales du catalogue dès la lecture depuis Supabase.
+ */
+export function hydrateItemFromCatalog(item: InventoryItem): InventoryItem {
+  if (item.image) return item;
+  const match =
+    SKIN_LOOKUP_MAP.get(item.skinId) ||
+    SKIN_LOOKUP_MAP.get(`${item.crateId}::${item.name}`) ||
+    SKIN_LOOKUP_MAP.get(`${item.weaponName}::${item.name}`);
+  if (match?.image) {
+    return { ...item, image: match.image };
+  }
+  return item;
+}
+
+export function sanitizeInventoryForCloud(inventory: InventoryItem[]): InventoryItem[] {
+  return inventory.map(sanitizeItemForCloud);
+}
+
+export function hydrateInventoryFromCatalog(inventory: InventoryItem[]): InventoryItem[] {
+  return inventory.map(hydrateItemFromCatalog);
 }
 
 export function parseSafeCloudNumber(value: unknown, fallback: number): number {
@@ -27,15 +71,25 @@ export function parseSafeCloudNumber(value: unknown, fallback: number): number {
   return Number.isFinite(num) ? num : fallback;
 }
 
+/**
+ * Signature d'inventaire ultra légère (instanceId + nom + float + wear + locked)
+ * Ne consomme quasi aucun octet et détecte toute modification sans comparer des images.
+ */
+export function buildInventorySignature(inventory: InventoryItem[]): string {
+  return inventory
+    .map((it) => `${it.instanceId}:${it.name}:${it.floatVal ?? 0}:${it.locked ? 1 : 0}`)
+    .join('|');
+}
+
 export function buildCloudBaseline(
   state: Pick<PersistedState, 'balance' | 'inventoryCapacity' | 'inventory' | 'history' | 'stats'>
 ): CloudBaseline {
   return {
     credits: state.balance,
     storageLimit: state.inventoryCapacity,
-    inventoryJson: JSON.stringify(state.inventory),
+    inventorySignature: buildInventorySignature(state.inventory),
     inventoryIds: state.inventory.map((it) => it.instanceId),
-    historyJson: JSON.stringify(state.history),
+    historyCount: state.history.length,
     statsJson: JSON.stringify(state.stats),
   };
 }
@@ -47,8 +101,8 @@ export function hasCloudSyncedDiff(
   if (!baseline) return true;
   if (state.balance !== baseline.credits) return true;
   if (state.inventoryCapacity !== baseline.storageLimit) return true;
-  if (JSON.stringify(state.inventory) !== baseline.inventoryJson) return true;
-  if (JSON.stringify(state.history) !== baseline.historyJson) return true;
+  if (buildInventorySignature(state.inventory) !== baseline.inventorySignature) return true;
+  if (state.history.length !== baseline.historyCount) return true;
   if (JSON.stringify(state.stats) !== baseline.statsJson) return true;
   return false;
 }
@@ -62,7 +116,7 @@ export interface MergeCloudResult {
 
 /**
  * Fusionne proprement les modifications effectuées côté Supabase (ex: ajout/retrait de crédits
- * ou de skins par l'admin) avec l'état local du joueur sans jamais écraser les changements admin.
+ * ou de skins par l'admin) avec l'état local du joueur sans écraser les changements admin.
  */
 export function mergeServerEditsIntoLocalState(
   localState: PersistedState,
@@ -71,18 +125,19 @@ export function mergeServerEditsIntoLocalState(
 ): MergeCloudResult {
   const serverCredits = parseSafeCloudNumber(serverRow.credits, baseline.credits);
   const serverLimit = parseSafeCloudNumber(serverRow.storage_limit, baseline.storageLimit);
-  const serverInv = Array.isArray(serverRow.inventory) ? serverRow.inventory : [];
-  const serverInvJson = JSON.stringify(serverInv);
+  const rawServerInv = Array.isArray(serverRow.inventory) ? serverRow.inventory : [];
+  const serverInv = hydrateInventoryFromCatalog(rawServerInv);
+  const serverSignature = buildInventorySignature(serverInv);
 
   const creditsDeltaFromAdmin = serverCredits - baseline.credits;
   const limitDeltaFromAdmin = serverLimit - baseline.storageLimit;
-  const inventoryChangedByAdmin = serverInvJson !== baseline.inventoryJson;
+  const inventoryChangedByAdmin = serverSignature !== baseline.inventorySignature;
 
   const adminChanged =
     creditsDeltaFromAdmin !== 0 || limitDeltaFromAdmin !== 0 || inventoryChangedByAdmin;
 
-  const localInvJson = JSON.stringify(localState.inventory);
-  const localInvChanged = localInvJson !== baseline.inventoryJson;
+  const localSignature = buildInventorySignature(localState.inventory);
+  const localInvChanged = localSignature !== baseline.inventorySignature;
 
   let mergedInventory = localState.inventory;
   if (inventoryChangedByAdmin) {
