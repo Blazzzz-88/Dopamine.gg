@@ -25,6 +25,7 @@ import {
 } from '../utils/storage';
 import { WeaponSilhouette } from './WeaponSilhouette';
 import { useWeaponInspector } from '../context/WeaponInspectorContext';
+import { Tilt3D } from './Tilt3D';
 
 interface InventoryViewProps {
   items: InventoryItem[];
@@ -341,18 +342,24 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                   initial={{ opacity: 0, scale: 0.94 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.88 }}
-                  className={`relative flex flex-col justify-between overflow-hidden rounded-2xl border bg-surface-card/95 p-4 ${
-                    isEquipped ? 'ring-2 ring-emerald-400/60' : ''
-                  }`}
-                  style={{
-                    borderColor: isEquipped ? '#34d399' : rarity.borderColor,
-                    boxShadow: isSecret ? `0 0 26px ${rarity.glowColor}` : undefined,
-                  }}
+                  className="h-full"
                 >
-                  <div
-                    className={`absolute inset-x-0 top-0 h-1 ${isSecret ? 'secret-prism-border' : ''}`}
-                    style={!isSecret ? { backgroundColor: rarity.color } : undefined}
-                  />
+                  <Tilt3D
+                    max={8}
+                    hoverScale={1.016}
+                    glare
+                    className={`relative flex h-full flex-col justify-between rounded-2xl border bg-surface-card/95 p-4 ${
+                      isEquipped ? 'ring-2 ring-emerald-400/60' : ''
+                    }`}
+                    style={{
+                      borderColor: isEquipped ? '#34d399' : rarity.borderColor,
+                      boxShadow: isSecret ? `0 0 26px ${rarity.glowColor}` : undefined,
+                    }}
+                  >
+                    <div
+                      className={`absolute inset-x-0 top-0 h-1 rounded-t-2xl ${isSecret ? 'secret-prism-border' : ''}`}
+                      style={!isSecret ? { backgroundColor: rarity.color } : undefined}
+                    />
 
                   <div className="flex items-center justify-between gap-2 pt-0.5">
                     <span
@@ -460,6 +467,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                       )}
                     </button>
                   </div>
+                  </Tilt3D>
                 </motion.div>
               );
             })}

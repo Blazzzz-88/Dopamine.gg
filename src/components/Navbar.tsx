@@ -17,6 +17,7 @@ import {
   Trophy,
   Cloud,
   RefreshCw,
+  Home,
 } from 'lucide-react';
 import { ThemeId, THEMES } from '../data/themes';
 import { NavTab } from '../types/casino';
@@ -25,7 +26,7 @@ import { soundEngine } from '../utils/sound';
 
 interface NavbarProps {
   activeTab: NavTab;
-  onTabChange: (tab: NavTab) => void;
+  onTabChange: (tab: NavTab, scrollTarget?: string) => void;
   balance: number;
   inventoryCount: number;
   inventoryCapacity?: number;
@@ -90,11 +91,11 @@ export const Navbar: React.FC<NavbarProps> = ({
   }, [creditMenuOpen]);
 
   return (
-    <header className="sticky top-0 z-40 border-b border-accent-500/15 bg-surface-base/85 backdrop-blur-xl">
+    <header className="sticky top-0 z-40 border-b border-accent-500/15 bg-surface-base/75 shadow-[0_12px_40px_-20px_rgba(0,0,0,0.9)] backdrop-blur-2xl">
       <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
         {/* Brand */}
         <button
-          onClick={() => onTabChange('boutique')}
+          onClick={() => onTabChange('boutique', 'hero-motion')}
           className="group flex items-center gap-3 text-left focus:outline-none"
         >
           <motion.div
@@ -139,15 +140,27 @@ export const Navbar: React.FC<NavbarProps> = ({
         </button>
 
         {/* Main Navigation Tabs */}
-        <nav className="order-3 flex w-full flex-wrap items-center justify-between gap-1 rounded-xl border border-accent-500/15 bg-surface-panel/90 p-1 lg:order-2 lg:w-auto lg:flex-nowrap lg:justify-center">
+        <nav className="order-3 flex w-full flex-wrap items-center justify-between gap-1 rounded-2xl border border-accent-500/15 bg-surface-panel/80 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] lg:order-2 lg:w-auto lg:flex-nowrap lg:justify-center">
+          <button
+            type="button"
+            onClick={() => onTabChange('boutique', 'hero-motion')}
+            className="hidden items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-accent-100/75 transition hover:bg-accent-500/10 hover:text-accent-200 sm:inline-flex lg:text-sm"
+            title="Retour à l’accueil Motion Design"
+          >
+            <Home className="h-4 w-4 text-accent-400" />
+            <span>Accueil</span>
+          </button>
+
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
             return (
               <button
                 key={item.id}
-                onClick={() => onTabChange(item.id)}
-                className={`relative flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2.5 py-2 text-[11px] font-semibold transition-colors sm:px-3.5 sm:text-sm lg:flex-initial ${
+                onClick={() =>
+                  onTabChange(item.id, item.id === 'boutique' ? 'categories-section' : undefined)
+                }
+                className={`relative flex flex-1 items-center justify-center gap-1.5 rounded-xl px-2.5 py-2 text-[11px] font-semibold transition-colors sm:px-3.5 sm:text-sm lg:flex-initial ${
                   isActive
                     ? 'text-accent-950'
                     : 'text-accent-100/70 hover:text-accent-200'
@@ -157,7 +170,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <motion.span
                     layoutId="active-nav-pill"
                     transition={{ type: 'spring', stiffness: 420, damping: 32 }}
-                    className="absolute inset-0 rounded-lg bg-gradient-to-r from-accent-400 to-accent2-300 shadow-[0_0_20px_var(--card-glow)]"
+                    className="absolute inset-0 rounded-xl bg-gradient-to-r from-accent-400 to-accent2-300 shadow-[0_0_24px_var(--card-glow)]"
                   />
                 )}
                 <span className="relative z-10 flex items-center gap-1.5">

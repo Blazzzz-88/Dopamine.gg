@@ -22,24 +22,29 @@ export const CrateEmblem: React.FC<CrateEmblemProps> = ({
     const hasCustomSizing = /\b(w-|h-|aspect-)/.test(className);
     return (
       <div
-        className={`relative overflow-hidden rounded-2xl border bg-[#060912] select-none transition-all duration-300 ${className}`}
+        className={`relative overflow-hidden rounded-2xl border bg-[#050811] select-none transition-all duration-500 ${className}`}
         style={{
-          borderColor: `${accentColor}45`,
-          boxShadow: `0 14px 32px -12px rgba(0,0,0,0.88), 0 0 28px -10px ${accentColor}42`,
+          borderColor: `${accentColor}50`,
+          boxShadow: `0 22px 42px -14px rgba(0,0,0,0.92), 0 0 34px -10px ${accentColor}4A, inset 0 1px 0 rgba(255,255,255,0.14)`,
           ...(hasCustomSizing ? {} : { width: Math.round(size * 1.34), height: size }),
         }}
       >
         <div
-          className="pointer-events-none absolute -inset-4 rounded-full opacity-25 blur-2xl transition-opacity duration-300 group-hover:opacity-50"
+          className="pointer-events-none absolute -inset-4 rounded-full opacity-30 blur-2xl transition-opacity duration-500 group-hover:opacity-60"
           style={{ background: accentColor }}
+        />
+        {/* Socle lumineux 3D sous la caisse */}
+        <div
+          className="pointer-events-none absolute bottom-2 left-1/2 h-5 w-3/4 -translate-x-1/2 rounded-[50%] opacity-50 blur-md transition-all duration-500 group-hover:w-4/5 group-hover:opacity-80"
+          style={{ background: `radial-gradient(ellipse, ${accentColor}75, transparent 70%)` }}
         />
         <img
           src={image}
           alt={alt}
           loading="lazy"
-          className="animate-float relative z-10 h-full w-full object-contain transition-transform duration-500 group-hover:scale-[1.07]"
+          className="animate-float relative z-10 h-full w-full object-contain drop-shadow-[0_18px_22px_rgba(0,0,0,0.82)] transition-transform duration-500 group-hover:scale-[1.09] group-hover:-translate-y-1"
         />
-        <div className="sheen-overlay pointer-events-none absolute inset-0 z-20 rounded-2xl shadow-[inset_0_0_24px_rgba(6,9,18,0.72)] ring-1 ring-inset ring-white/10" />
+        <div className="sheen-overlay pointer-events-none absolute inset-0 z-20 rounded-2xl shadow-[inset_0_0_28px_rgba(5,8,17,0.72)] ring-1 ring-inset ring-white/12" />
       </div>
     );
   }

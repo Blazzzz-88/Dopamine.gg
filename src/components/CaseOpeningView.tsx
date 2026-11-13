@@ -32,6 +32,7 @@ import { DropRevealModal } from './DropRevealModal';
 import { RouletteReel } from './RouletteReel';
 import { WeaponSilhouette } from './WeaponSilhouette';
 import { useWeaponInspector } from '../context/WeaponInspectorContext';
+import { Tilt3D } from './Tilt3D';
 
 interface ReelJob {
   strip: SkinDefinition[];
@@ -439,16 +440,19 @@ export const CaseOpeningView: React.FC<CaseOpeningViewProps> = ({
             const isSecret = skin.rarity === 'secret';
 
             return (
-              <div
+              <Tilt3D
                 key={skin.id}
-                className="relative flex flex-col justify-between overflow-hidden rounded-2xl border bg-surface-card/90 p-4 transition hover:-translate-y-0.5"
+                max={7}
+                hoverScale={1.015}
+                glare
+                className="relative flex flex-col justify-between rounded-2xl border bg-surface-card/90 p-4"
                 style={{
                   borderColor: rarity.borderColor,
                   boxShadow: isSecret ? `0 0 24px ${rarity.glowColor}` : undefined,
                 }}
               >
                 <div
-                  className={`absolute inset-x-0 top-0 h-1 ${isSecret ? 'secret-prism-border' : ''}`}
+                  className={`absolute inset-x-0 top-0 h-1 rounded-t-2xl ${isSecret ? 'secret-prism-border' : ''}`}
                   style={!isSecret ? { backgroundColor: rarity.color } : undefined}
                 />
 
@@ -496,7 +500,7 @@ export const CaseOpeningView: React.FC<CaseOpeningViewProps> = ({
                     </span>
                   </div>
                 </div>
-              </div>
+              </Tilt3D>
             );
           })}
         </div>

@@ -6,6 +6,7 @@ import { InventoryItem } from '../types/casino';
 import { formatCredits } from '../utils/rng';
 import { WeaponSilhouette } from './WeaponSilhouette';
 import { useWeaponInspector } from '../context/WeaponInspectorContext';
+import { Tilt3D } from './Tilt3D';
 
 interface DropRevealModalProps {
   items: InventoryItem[];
@@ -124,15 +125,24 @@ export const DropRevealModal: React.FC<DropRevealModalProps> = ({
                   initial={{ opacity: 0, y: 14, scale: 0.95 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   transition={{ delay: Math.min(idx * 0.04, 0.35) }}
-                  className={`relative flex flex-col justify-between overflow-hidden rounded-2xl border bg-surface-card ${
-                    isCompact ? 'p-2.5 sm:p-3' : 'p-4'
-                  }`}
-                  style={{ borderColor: r.borderColor }}
+                  className="h-full"
                 >
-                  <div
-                    className={`absolute inset-x-0 top-0 h-1 ${isSecret ? 'secret-prism-border' : ''}`}
-                    style={!isSecret ? { backgroundColor: r.color } : undefined}
-                  />
+                  <Tilt3D
+                    max={isCompact ? 8 : 11}
+                    hoverScale={1.02}
+                    glare
+                    className={`relative flex h-full flex-col justify-between rounded-2xl border bg-surface-card ${
+                      isCompact ? 'p-2.5 sm:p-3' : 'p-4'
+                    }`}
+                    style={{
+                      borderColor: r.borderColor,
+                      boxShadow: `0 18px 40px -22px ${r.glowColor}`,
+                    }}
+                  >
+                    <div
+                      className={`absolute inset-x-0 top-0 h-1 rounded-t-2xl ${isSecret ? 'secret-prism-border' : ''}`}
+                      style={!isSecret ? { backgroundColor: r.color } : undefined}
+                    />
 
                   <div className="flex items-center justify-between gap-1">
                     <span
@@ -189,6 +199,7 @@ export const DropRevealModal: React.FC<DropRevealModalProps> = ({
                       )}
                     </div>
                   </div>
+                  </Tilt3D>
                 </motion.div>
               );
             })}

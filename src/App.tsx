@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { CRATES } from './data/catalog';
 import { RARITIES } from './data/rarities';
-import { ThemeId } from './data/themes';
+import { ThemeId, THEMES } from './data/themes';
 import {
   CrateDefinition,
   DropHistoryItem,
@@ -28,7 +27,7 @@ import {
 } from './utils/storage';
 import { Navbar } from './components/Navbar';
 import { LiveTicker } from './components/LiveTicker';
-import { HeroBanner } from './components/HeroBanner';
+import { LandingHome } from './components/LandingHome';
 import { CategorySection } from './components/CategorySection';
 import { CaseOpeningView } from './components/CaseOpeningView';
 import { InventoryView } from './components/InventoryView';
@@ -451,9 +450,14 @@ export function App() {
     Array.from({ length: 10 }, () => generateSimulatedDrop())
   );
 
-  // Sync theme attribute on <html>
+  // Sync theme attribute on <html> + meta theme-color
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', persisted.themeId);
+    const metaTheme = document.querySelector('meta[name="theme-color"]');
+    const activeTheme = THEMES.find((t) => t.id === persisted.themeId);
+    if (metaTheme && activeTheme) {
+      metaTheme.setAttribute('content', activeTheme.baseBg);
+    }
   }, [persisted.themeId]);
 
   // Keep sound engine synced
@@ -474,13 +478,23 @@ export function App() {
     return () => clearInterval(timer);
   }, []);
 
-  const handleTabChange = (tab: NavTab) => {
+  const handleTabChange = (tab: NavTab, scrollTarget?: string) => {
     soundEngine.playClick();
     setActiveTab(tab);
     if (tab === 'boutique') {
       setActiveCrate(null);
     }
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (scrollTarget) {
+      setTimeout(() => {
+        if (scrollTarget === 'hero-motion') {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        } else {
+          document.getElementById(scrollTarget)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 60);
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   };
 
   const handleSelectCrate = (crate: CrateDefinition) => {
@@ -1019,8 +1033,9 @@ export function App() {
       ) : (
       <div className="relative min-h-screen bg-surface-base text-accent-50 transition-colors duration-300">
       {/* Ambient dynamic architectural background */}
-      <div className="bg-vault-grid animate-vault-grid pointer-events-none fixed inset-0 opacity-70" />
-      <div className="bg-vault-aura pointer-events-none fixed inset-x-0 top-0 h-[440px]" />
+      <div className="bg-vault-grid animate-vault-grid pointer-events-none fixed inset-0 opacity-75" />
+      <div className="bg-vault-aura pointer-events-none fixed inset-x-0 top-0 h-[480px]" />
+      <div className="noise-overlay pointer-events-none fixed inset-0" />
       <motion.div
         animate={{ x: [0, 35, 0], y: [0, -24, 0], opacity: [0.16, 0.28, 0.16] }}
         transition={{ duration: 14, repeat: Infinity, ease: 'easeInOut' }}
@@ -1072,17 +1087,22 @@ export function App() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -4 }}
                 transition={{ duration: 0.16 }}
-                className="space-y-10"
+                className="space-y-16"
               >
-                <HeroBanner
-                  onExploreClick={() => {
+                <LandingHome
+                  themeId={persisted.themeId}
+                  onSelectTheme={handleSelectTheme}
+                  onSelectCrate={handleSelectCrate}
+                  onExploreCrates={() => {
                     document
                       .getElementById('categories-section')
-                      ?.scrollIntoView({ behavior: 'smooth' });
+                      ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                   }}
-                  onOpenFeaturedCrate={() =>
-                    handleSelectCrate(CRATES[CRATES.length - 1])
-                  }
+                  onNavigateTab={(tab) => handleTabChange(tab)}
+                  onOpenZombie={() => {
+                    syncDailyDateRollover();
+                    setPageMode('zombie');
+                  }}
                 />
                 <CategorySection onSelectCrate={handleSelectCrate} />
               </motion.div>
