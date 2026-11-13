@@ -151,13 +151,13 @@ export function App() {
       cloudBaselineRef.current = merged.nextBaseline;
       hasDirtyChangesRef.current = false;
       setPersisted(merged.nextState);
-      savePersistedState(merged.nextState);
+      savePersistedState(merged.nextState, currentUser?.id);
 
       if (merged.creditsDeltaFromAdmin > 0) {
         pushToast(`+${formatCredits(merged.creditsDeltaFromAdmin)} reçus sur votre compte !`);
       }
     },
-    [pushToast]
+    [pushToast, currentUser]
   );
 
   // Fonction de sauvegarde immédiate vers Supabase avec fusion anti-écrasement admin
@@ -231,7 +231,7 @@ export function App() {
 
           if (adminUpdatedDuringSave) {
             setPersisted(stateToWrite);
-            savePersistedState(stateToWrite);
+            savePersistedState(stateToWrite, currentUser.id);
             if (adminCreditsDelta > 0) {
               pushToast(`+${formatCredits(adminCreditsDelta)} reçus sur votre compte !`);
             }
@@ -295,7 +295,7 @@ export function App() {
         cloudBaselineRef.current = buildCloudBaseline(cloudState);
         hasDirtyChangesRef.current = false;
         setPersisted(cloudState);
-        savePersistedState(cloudState);
+        savePersistedState(cloudState, user.id);
         isCloudLoadedRef.current = true;
         setCloudSyncStatus('synced');
       } else {
@@ -317,6 +317,9 @@ export function App() {
       const user = session?.user ?? null;
       setCurrentUser(user);
       if (user && loadedCloudUserIdRef.current !== user.id) {
+        const userLocalState = loadPersistedState(user.id);
+        setPersisted(userLocalState);
+        persistedRef.current = userLocalState;
         loadedCloudUserIdRef.current = user.id;
         loadCloudProfile(user);
       }
@@ -328,8 +331,14 @@ export function App() {
       const user = session?.user ?? null;
       setCurrentUser(user);
       if (user) {
-        if (loadedCloudUserIdRef.current !== user.id && event !== 'TOKEN_REFRESHED') {
+        if (loadedCloudUserIdRef.current !== user.id) {
+          // Si l'utilisateur a changé, charger d'abord son cache local dédié
+          const userLocalState = loadPersistedState(user.id);
+          setPersisted(userLocalState);
+          persistedRef.current = userLocalState;
           loadedCloudUserIdRef.current = user.id;
+          loadCloudProfile(user);
+        } else if (event !== 'TOKEN_REFRESHED') {
           loadCloudProfile(user);
         }
       } else {
@@ -340,6 +349,9 @@ export function App() {
         hasDirtyChangesRef.current = false;
         setCurrentUsername(null);
         setCloudSyncStatus('idle');
+        const anonState = loadPersistedState(null);
+        setPersisted(anonState);
+        persistedRef.current = anonState;
       }
     });
 
@@ -447,8 +459,8 @@ export function App() {
 
   // Persist changes
   useEffect(() => {
-    savePersistedState(persisted);
-  }, [persisted]);
+    savePersistedState(persisted, currentUser?.id);
+  }, [persisted, currentUser]);
 
   // Periodic ambient simulated drop in live ticker
   useEffect(() => {

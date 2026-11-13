@@ -53,7 +53,6 @@ export function createDefaultStats(): PlayerStats {
     totalWonValue: 0,
     upgradesAttempted: 0,
     upgradesWon: 0,
-    contractsCompleted: 0,
     bestDropValue: 0,
     bestDropName: null,
     rarityCounts: {
@@ -86,100 +85,115 @@ export function createInitialState(): PersistedState {
 
 export const INITIAL_STATE: PersistedState = createInitialState();
 
-export function loadPersistedState(): PersistedState {
-  let resolvedState: PersistedState;
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      // One-time clean reset of balance, inventory, purchases & history across legacy keys
-      let preservedTheme: ThemeId = DEFAULT_THEME;
-      let preservedSound = true;
-      for (const oldKey of LEGACY_KEYS) {
-        const oldRaw = localStorage.getItem(oldKey);
-        if (oldRaw) {
-          try {
-            const oldParsed = JSON.parse(oldRaw) as Partial<PersistedState>;
-            if (THEMES.some((t) => t.id === oldParsed.themeId)) {
-              preservedTheme = oldParsed.themeId as ThemeId;
-            }
-            if (typeof oldParsed.soundEnabled === 'boolean') {
-              preservedSound = oldParsed.soundEnabled;
-            }
-          } catch {
-            // Ignore malformed legacy state
-          }
-          localStorage.removeItem(oldKey);
-        }
-      }
-      const fresh: PersistedState = {
-        ...createInitialState(),
-        themeId: preservedTheme,
-        soundEnabled: preservedSound,
-      };
-      savePersistedState(fresh);
-      resolvedState = fresh;
-    } else {
-      const parsed = JSON.parse(raw) as Partial<PersistedState>;
-      const validTheme = THEMES.some((t) => t.id === parsed.themeId)
-        ? (parsed.themeId as ThemeId)
-        : DEFAULT_THEME;
-
-      const inv = Array.isArray(parsed.inventory) ? parsed.inventory : [];
-      const cap =
-        typeof parsed.inventoryCapacity === 'number' &&
-        parsed.inventoryCapacity >= BASE_INVENTORY_CAPACITY
-          ? parsed.inventoryCapacity
-          : BASE_INVENTORY_CAPACITY;
-      const rawEqWeapon =
-        typeof parsed.equippedWeaponId === 'string'
-          ? inv.find((it) => it.instanceId === parsed.equippedWeaponId) ?? null
-          : null;
-      const explicitKnife =
-        typeof parsed.equippedKnifeId === 'string'
-          ? inv.find((it) => it.instanceId === parsed.equippedKnifeId && it.weaponClass === 'lame') ??
-            null
-          : null;
-
-      // Migrate any knife previously saved under equippedWeaponId into dedicated knife slot
-      const eqId = rawEqWeapon && rawEqWeapon.weaponClass !== 'lame' ? rawEqWeapon.instanceId : null;
-      const eqKnifeId =
-        explicitKnife?.instanceId ??
-        (rawEqWeapon && rawEqWeapon.weaponClass === 'lame' ? rawEqWeapon.instanceId : null);
-
-      resolvedState = {
-        balance: typeof parsed.balance === 'number' ? parsed.balance : INITIAL_STATE.balance,
-        inventory: inv,
-        inventoryCapacity: cap,
-        equippedWeaponId: eqId,
-        equippedKnifeId: eqKnifeId,
-        history: Array.isArray(parsed.history) ? parsed.history : [],
-        stats: parsed.stats
-          ? {
-              ...createDefaultStats(),
-              ...parsed.stats,
-              rarityCounts: {
-                ...createDefaultStats().rarityCounts,
-                ...(parsed.stats.rarityCounts ?? {}),
-              },
-            }
-          : createDefaultStats(),
-        dailyChallenges: ensureTodayChallenges(parsed.dailyChallenges),
-        pendingUpgrade: parsed.pendingUpgrade ?? null,
-        soundEnabled: typeof parsed.soundEnabled === 'boolean' ? parsed.soundEnabled : true,
-        themeId: validTheme,
-      };
-    }
-  } catch {
-    resolvedState = createInitialState();
+export function getUserStorageKey(userId?: string | null): string {
+  if (userId && typeof userId === 'string') {
+    return `${STORAGE_KEY}_user_${userId}`;
   }
-
-  // Pack personnel désactivé pour que l'inventaire commence vide pour tout le monde
-  return resolvedState;
+  return STORAGE_KEY;
 }
 
-export function savePersistedState(state: PersistedState): void {
+export function parsePersistedStateRaw(raw: string | null): PersistedState {
+  if (!raw) return createInitialState();
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    const parsed = JSON.parse(raw) as Partial<PersistedState>;
+    const validTheme = THEMES.some((t) => t.id === parsed.themeId)
+      ? (parsed.themeId as ThemeId)
+      : DEFAULT_THEME;
+
+    const inv = Array.isArray(parsed.inventory) ? parsed.inventory : [];
+    const cap =
+      typeof parsed.inventoryCapacity === 'number' &&
+      parsed.inventoryCapacity >= BASE_INVENTORY_CAPACITY
+        ? parsed.inventoryCapacity
+        : BASE_INVENTORY_CAPACITY;
+    const rawEqWeapon =
+      typeof parsed.equippedWeaponId === 'string'
+        ? inv.find((it) => it.instanceId === parsed.equippedWeaponId) ?? null
+        : null;
+    const explicitKnife =
+      typeof parsed.equippedKnifeId === 'string'
+        ? inv.find((it) => it.instanceId === parsed.equippedKnifeId && it.weaponClass === 'lame') ??
+          null
+        : null;
+
+    const eqId = rawEqWeapon && rawEqWeapon.weaponClass !== 'lame' ? rawEqWeapon.instanceId : null;
+    const eqKnifeId =
+      explicitKnife?.instanceId ??
+      (rawEqWeapon && rawEqWeapon.weaponClass === 'lame' ? rawEqWeapon.instanceId : null);
+
+    return {
+      balance: typeof parsed.balance === 'number' ? parsed.balance : INITIAL_STATE.balance,
+      inventory: inv,
+      inventoryCapacity: cap,
+      equippedWeaponId: eqId,
+      equippedKnifeId: eqKnifeId,
+      history: Array.isArray(parsed.history) ? parsed.history : [],
+      stats: parsed.stats
+        ? {
+            ...createDefaultStats(),
+            ...parsed.stats,
+            rarityCounts: {
+              ...createDefaultStats().rarityCounts,
+              ...(parsed.stats.rarityCounts ?? {}),
+            },
+          }
+        : createDefaultStats(),
+      dailyChallenges: ensureTodayChallenges(parsed.dailyChallenges),
+      pendingUpgrade: parsed.pendingUpgrade ?? null,
+      soundEnabled: typeof parsed.soundEnabled === 'boolean' ? parsed.soundEnabled : true,
+      themeId: validTheme,
+    };
+  } catch {
+    return createInitialState();
+  }
+}
+
+export function loadPersistedState(userId?: string | null): PersistedState {
+  try {
+    const key = getUserStorageKey(userId);
+    const raw = localStorage.getItem(key);
+    if (!raw) {
+      if (!userId) {
+        // One-time clean reset of balance, inventory, purchases & history across legacy keys
+        let preservedTheme: ThemeId = DEFAULT_THEME;
+        let preservedSound = true;
+        for (const oldKey of LEGACY_KEYS) {
+          const oldRaw = localStorage.getItem(oldKey);
+          if (oldRaw) {
+            try {
+              const oldParsed = JSON.parse(oldRaw) as Partial<PersistedState>;
+              if (THEMES.some((t) => t.id === oldParsed.themeId)) {
+                preservedTheme = oldParsed.themeId as ThemeId;
+              }
+              if (typeof oldParsed.soundEnabled === 'boolean') {
+                preservedSound = oldParsed.soundEnabled;
+              }
+            } catch {
+              // Ignore malformed legacy state
+            }
+            localStorage.removeItem(oldKey);
+          }
+        }
+        const fresh: PersistedState = {
+          ...createInitialState(),
+          themeId: preservedTheme,
+          soundEnabled: preservedSound,
+        };
+        savePersistedState(fresh, null);
+        return fresh;
+      }
+      return createInitialState();
+    }
+    return parsePersistedStateRaw(raw);
+  } catch {
+    return createInitialState();
+  }
+}
+
+export function savePersistedState(state: PersistedState, userId?: string | null): void {
+  try {
+    const key = getUserStorageKey(userId);
+    localStorage.setItem(key, JSON.stringify(state));
   } catch {
     // Ignore storage quota errors silently
   }
