@@ -345,7 +345,7 @@ describe('knifeAnimations — verrouillage strict en main, style Valorant et zé
     expect(dague.getState()).toBe('idle');
   });
 
-  it('attaque en estocade vers l’avant (planter le couteau) uniquement avec la main droite sans bouger la main gauche', () => {
+  it('exécute les attaques Valorant (combo 2 coups + attaque lourde) uniquement avec la main droite vers l’avant', () => {
     const types: KnifeType[] = ['karambit', 'baionnette', 'katana', 'dague'];
     for (const kType of types) {
       for (const heavy of [false, true]) {
@@ -357,13 +357,37 @@ describe('knifeAnimations — verrouillage strict en main, style Valorant et zé
           if (pose.rightArmPos.z < minRightZ) minRightZ = pose.rightArmPos.z;
           if (anim.getState() === 'attack1' || anim.getState() === 'attack2') {
             expect(pose.leftArmPos.length()).toBeLessThan(1e-6);
-            expect(Math.abs(pose.leftArmRot.x) + Math.abs(pose.leftArmRot.y) + Math.abs(pose.leftArmRot.z)).toBeLessThan(1e-6);
+            expect(
+              Math.abs(pose.leftArmRot.x) + Math.abs(pose.leftArmRot.y) + Math.abs(pose.leftArmRot.z)
+            ).toBeLessThan(1e-6);
             expect(pose.rigPos.length()).toBeLessThan(1e-6);
-            expect(Math.abs(pose.rigRot.x) + Math.abs(pose.rigRot.y) + Math.abs(pose.rigRot.z)).toBeLessThan(1e-6);
+            expect(
+              Math.abs(pose.rigRot.x) + Math.abs(pose.rigRot.y) + Math.abs(pose.rigRot.z)
+            ).toBeLessThan(1e-6);
           }
         }
         expect(minRightZ).toBeLessThan(-0.18);
       }
+
+      // Vérifie que le clic gauche alterne bien entre Coup 1 (droite->gauche) et Coup 2 (revers gauche->droite)
+      const comboAnim = createKnifeAnimator(kType);
+      comboAnim.triggerAttack(false);
+      let hit1MinX = 0;
+      for (let s = 0; s < 12; s++) {
+        const p = comboAnim.update(1 / 60, s * 16.6);
+        if (p.rightArmPos.x < hit1MinX) hit1MinX = p.rightArmPos.x;
+      }
+      expect(hit1MinX).toBeLessThan(-0.08);
+
+      // Déclenchement du second coup du combo Valorant (revers gauche -> droite)
+      for (let s = 0; s < 15; s++) comboAnim.update(1 / 60, 200 + s * 16.6);
+      comboAnim.triggerAttack(false);
+      let hit2MaxX = 0;
+      for (let s = 0; s < 12; s++) {
+        const p = comboAnim.update(1 / 60, 500 + s * 16.6);
+        if (p.rightArmPos.x > hit2MaxX) hit2MaxX = p.rightArmPos.x;
+      }
+      expect(hit2MaxX).toBeGreaterThan(0.04);
     }
   });
 });

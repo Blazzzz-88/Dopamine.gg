@@ -104,23 +104,49 @@ export const Navbar: React.FC<NavbarProps> = ({
             className="animate-aura-pulse relative flex h-10 w-10 items-center justify-center rounded-xl border border-accent-400/35 bg-accent-950/75"
           >
             <motion.svg
-              animate={{ scale: [1, 1.05, 1] }}
-              transition={{ duration: 3.4, repeat: Infinity, ease: 'easeInOut' }}
+              animate={{ scale: [1, 1.06, 1] }}
+              transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
               viewBox="0 0 36 36"
               className="h-6 w-6"
               fill="none"
             >
-              <polygon
-                points="18,3 31,12 26,31 10,31 5,12"
-                stroke="var(--accent-400)"
-                strokeWidth="2.2"
-                fill="color-mix(in srgb, var(--accent-400) 18%, transparent)"
-              />
-              <polygon
-                points="18,9 24,14 21,25 15,25 12,14"
-                fill="var(--accent-300)"
-                fillOpacity="0.7"
-              />
+              <g transform="rotate(45 18 18)" strokeLinecap="round" strokeLinejoin="round">
+                {/* Piston (haut) */}
+                <line x1="14" y1="4" x2="22" y2="4" stroke="var(--accent-300)" strokeWidth="2.2" />
+                <line x1="18" y1="4" x2="18" y2="10" stroke="var(--accent-400)" strokeWidth="2" />
+                {/* Ailettes de prise */}
+                <line x1="12" y1="10" x2="24" y2="10" stroke="var(--accent-400)" strokeWidth="2.2" />
+                {/* Corps de la seringue */}
+                <rect
+                  x="14"
+                  y="10"
+                  width="8"
+                  height="14"
+                  rx="1.5"
+                  stroke="var(--accent-400)"
+                  strokeWidth="2"
+                  fill="color-mix(in srgb, var(--accent-400) 16%, transparent)"
+                />
+                {/* Sérum lumineux à l'intérieur */}
+                <rect
+                  x="15.3"
+                  y="15.5"
+                  width="5.4"
+                  height="7.3"
+                  rx="0.8"
+                  fill="var(--accent-300)"
+                  fillOpacity="0.85"
+                />
+                {/* Graduations */}
+                <line x1="14.5" y1="13.5" x2="17" y2="13.5" stroke="var(--accent-200)" strokeWidth="1.3" />
+                <line x1="14.5" y1="16.8" x2="17.5" y2="16.8" stroke="var(--accent-950)" strokeWidth="1.3" />
+                <line x1="14.5" y1="20" x2="17" y2="20" stroke="var(--accent-950)" strokeWidth="1.3" />
+                {/* Embout & aiguille */}
+                <path d="M16 24 H20 L19 26.8 H17 Z" fill="var(--accent-400)" />
+                <line x1="18" y1="26.8" x2="18" y2="32.5" stroke="var(--accent-300)" strokeWidth="1.9" />
+                {/* Goutte de dopamine */}
+                <circle cx="18" cy="34.2" r="1.1" fill="var(--accent-300)" />
+              </g>
             </motion.svg>
           </motion.div>
           <div>
