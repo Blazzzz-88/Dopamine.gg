@@ -4,13 +4,14 @@ import {
   ArrowLeft,
   Check,
   Copy,
-  Crosshair,
   Globe,
   KeyRound,
+  Laptop,
   Loader2,
   Play,
   RotateCw,
   Shield,
+  SlidersHorizontal,
   Swords,
   Trophy,
   UserCheck,
@@ -82,6 +83,15 @@ import {
   FPS_PITCH_LIMIT,
   ZombieSlot,
 } from '../utils/zombieEngine';
+import {
+  computeEffectiveSensitivityMultiplier,
+  CROSSHAIR_COLOR_PRESETS,
+  CrosshairStyle,
+  loadPvpControlsConfig,
+  PvpControlsConfig,
+  savePvpControlsConfig,
+} from '../utils/pvpSettings';
+import { PvpCrosshair } from './PvpCrosshair';
 
 interface PvpArenaViewProps {
   inventory: InventoryItem[];
@@ -270,6 +280,23 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
   const [opponentRematchVoted, setOpponentRematchVoted] = useState<boolean>(false);
   const [earnedCredits, setEarnedCredits] = useState<number>(0);
   const [webglError, setWebglError] = useState<string | null>(null);
+  const [controlsConfig, setControlsConfig] = useState<PvpControlsConfig>(() =>
+    loadPvpControlsConfig()
+  );
+
+  const updateControlsConfig = useCallback(
+    (updater: (prev: PvpControlsConfig) => PvpControlsConfig) => {
+      setControlsConfig((prev) => {
+        const next = updater(prev);
+        savePvpControlsConfig(next);
+        return next;
+      });
+    },
+    []
+  );
+
+  const controlsConfigRef = useRef(controlsConfig);
+  controlsConfigRef.current = controlsConfig;
 
   const stageRef = useRef<HTMLDivElement | null>(null);
   const lobbyRef = useRef<LobbySession | null>(null);
@@ -887,9 +914,20 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
     // Input state
     const keys = new Set<string>();
     let mouseDown = false;
+    let keyFireHeld = false;
     let isDraggingLook = false;
     let lastClientX = 0;
     let lastClientY = 0;
+    let hasFreeLookSample = false;
+    let skipPostLockMoves = 0;
+
+    const clearStuckInputs = () => {
+      keys.clear();
+      mouseDown = false;
+      keyFireHeld = false;
+      isDraggingLook = false;
+      hasFreeLookSample = false;
+    };
 
     const triggerReload = () => {
       const profile = combatProfileRef.current;
@@ -1003,9 +1041,22 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
         gameStateRef.current.velY = 6.2;
         gameStateRef.current.isGrounded = false;
       }
+      // Trackpad-friendly keyboard fire (F / E) & AWP scope (V)
+      if (controlsConfigRef.current.trackpadMode) {
+        if ((e.code === 'KeyF' || e.code === 'KeyE') && phaseRef.current === 'playing') {
+          keyFireHeld = true;
+          performShoot();
+        }
+        if (e.code === 'KeyV' && combatProfileRef.current.isSniper && phaseRef.current === 'playing') {
+          setIsScoped((v) => !v);
+        }
+      }
     };
     const onKeyUp = (e: KeyboardEvent) => {
       keys.delete(e.code);
+      if (e.code === 'KeyF' || e.code === 'KeyE') {
+        keyFireHeld = false;
+      }
     };
 
     const onMouseDown = (e: MouseEvent) => {
@@ -1034,28 +1085,87 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
 
     const onMouseMove = (e: MouseEvent) => {
       if (phaseRef.current !== 'playing' && phaseRef.current !== 'countdown') return;
+      const cfgCtrl = controlsConfigRef.current;
       let dx = 0;
       let dy = 0;
+      let isDragFallback = false;
+
       if (document.pointerLockElement === renderer.domElement) {
+        if (skipPostLockMoves > 0) {
+          skipPostLockMoves -= 1;
+          return;
+        }
         dx = e.movementX || 0;
         dy = e.movementY || 0;
       } else if (isDraggingLook) {
+        if ((e.buttons & 1) === 0) {
+          isDraggingLook = false;
+          mouseDown = false;
+          return;
+        }
         dx = e.clientX - lastClientX;
         dy = e.clientY - lastClientY;
         lastClientX = e.clientX;
         lastClientY = e.clientY;
+        isDragFallback = true;
+      } else if (cfgCtrl.trackpadMode && e.target === renderer.domElement) {
+        // Trackpad free-aim: glide finger on trackpad without needing to hold click
+        if (!hasFreeLookSample) {
+          lastClientX = e.clientX;
+          lastClientY = e.clientY;
+          hasFreeLookSample = true;
+          return;
+        }
+        dx = e.clientX - lastClientX;
+        dy = e.clientY - lastClientY;
+        lastClientX = e.clientX;
+        lastClientY = e.clientY;
+        isDragFallback = true;
       } else {
+        hasFreeLookSample = false;
         return;
       }
+
+      if (cfgCtrl.trackpadMode && Math.hypot(dx, dy) < 1.5) {
+        dx *= 0.72;
+        dy *= 0.72;
+      }
+
       const st = gameStateRef.current;
-      const sens = isScopedRef.current ? FPS_MOUSE_SENSITIVITY * 0.45 : FPS_MOUSE_SENSITIVITY;
-      const next = applyFpsMouseDelta(st.yaw, st.pitch, dx, dy, sens, FPS_PITCH_LIMIT);
-      st.yaw = next.yaw;
-      st.pitch = next.pitch;
+      const sensMult = computeEffectiveSensitivityMultiplier(
+        cfgCtrl.sensitivity,
+        cfgCtrl.trackpadMode
+      );
+      const baseSens = isDragFallback
+        ? FPS_MOUSE_SENSITIVITY * 1.15 * sensMult
+        : FPS_MOUSE_SENSITIVITY * sensMult;
+
+      const next = applyFpsMouseDelta(
+        st.yaw,
+        st.pitch,
+        dx,
+        dy,
+        camera.fov,
+        baseSens,
+        isDragFallback ? 350 : undefined
+      );
+      if (!next.ignoredSpike) {
+        st.yaw = next.yaw;
+        st.pitch = next.pitch;
+      }
     };
 
     const onPointerLockChange = () => {
-      setIsLocked(document.pointerLockElement === renderer.domElement);
+      const locked = document.pointerLockElement === renderer.domElement;
+      setIsLocked(locked);
+      if (locked) {
+        skipPostLockMoves = 2;
+      }
+      hasFreeLookSample = false;
+    };
+
+    const onVisibilityChange = () => {
+      if (document.hidden) clearStuckInputs();
     };
 
     const onContextMenu = (e: MouseEvent) => e.preventDefault();
@@ -1073,7 +1183,9 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
     window.addEventListener('keyup', onKeyUp);
     window.addEventListener('mousedown', onMouseDown);
     window.addEventListener('mouseup', onMouseUp);
-    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('blur', clearStuckInputs);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('pointerlockchange', onPointerLockChange);
     renderer.domElement.addEventListener('contextmenu', onContextMenu);
     window.addEventListener('resize', onResize);
@@ -1099,7 +1211,7 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
       }
 
       // Auto-fire for automatic weapons
-      if (mouseDown && curPhase === 'playing' && combatProfileRef.current.automatic) {
+      if ((mouseDown || keyFireHeld) && curPhase === 'playing' && combatProfileRef.current.automatic) {
         performShoot();
       }
 
@@ -1276,7 +1388,9 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('mousedown', onMouseDown);
       window.removeEventListener('mouseup', onMouseUp);
-      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('blur', clearStuckInputs);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('pointerlockchange', onPointerLockChange);
       renderer.domElement.removeEventListener('contextmenu', onContextMenu);
       window.removeEventListener('resize', onResize);
@@ -1391,7 +1505,7 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
       {phase === 'playing' && !isScoped && (
         <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
           <div className="relative flex items-center justify-center">
-            <Crosshair className="h-5 w-5 text-cyan-300/85 drop-shadow-[0_0_6px_rgba(34,211,238,0.8)]" />
+            <PvpCrosshair config={controlsConfig.crosshair} />
             {hitmarker && (
               <motion.div
                 key={hitmarker.key}
@@ -1483,9 +1597,11 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
               </div>
               <span className="w-8 text-right font-mono text-xs font-bold">{opponentHp}</span>
             </div>
-            {!isLocked && (
-              <div className="mt-1 text-[10px] text-cyan-300/80">
-                Cliquez sur l’écran pour viser • ZQSD/WASD • R Recharger • 1/2 Armes
+            {(!isLocked || controlsConfig.trackpadMode) && (
+              <div className="mt-1 text-[10px] text-cyan-300/85">
+                {controlsConfig.trackpadMode
+                  ? 'Mode Trackpad : Glisser pour viser • [F] / [E] Tirer • [V] Viser (AWP) • [R] Recharger'
+                  : 'Cliquez sur l’écran pour viser • ZQSD/WASD • R Recharger • 1/2 Armes'}
               </div>
             )}
           </div>
@@ -1528,8 +1644,8 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
         phase === 'waiting_room' ||
         phase === 'match_over' ||
         phase === 'opponent_left') && (
-        <div className="relative z-30 flex flex-1 items-center justify-center p-4">
-          <div className="w-full max-w-2xl rounded-3xl border border-white/15 bg-slate-950/88 p-6 shadow-2xl backdrop-blur-2xl sm:p-8">
+        <div className="relative z-30 flex flex-1 items-center justify-center overflow-y-auto p-4">
+          <div className="w-full max-w-3xl max-h-[88vh] overflow-y-auto rounded-3xl border border-white/15 bg-slate-950/88 p-5 shadow-2xl backdrop-blur-2xl sm:p-7">
             {phase === 'menu' && (
               <div className="space-y-6">
                 <div className="flex items-start justify-between gap-4">
@@ -1603,6 +1719,197 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
                     </select>
                   </div>
                 )}
+
+                {/* Sensibilité, Mode Trackpad & Personnalisation Crosshair */}
+                <div className="grid gap-4 rounded-2xl border border-white/10 bg-slate-900/65 p-4 sm:grid-cols-2">
+                  {/* Left: Sensitivity & Laptop Trackpad */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-cyan-300">
+                      <SlidersHorizontal className="h-3.5 w-3.5" />
+                      Sensibilité & Contrôles
+                    </div>
+
+                    <div>
+                      <div className="mb-1 flex items-center justify-between text-[11px] text-slate-300">
+                        <span>Sensibilité (base Zombie)</span>
+                        <span className="font-mono font-bold text-cyan-300">
+                          {controlsConfig.sensitivity.toFixed(2)}x
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0.25}
+                        max={2.0}
+                        step={0.05}
+                        value={controlsConfig.sensitivity}
+                        onChange={(e) =>
+                          updateControlsConfig((prev) => ({
+                            ...prev,
+                            sensitivity: parseFloat(e.target.value),
+                          }))
+                        }
+                        aria-label="Sensibilité 1V1"
+                        className="w-full accent-cyan-400"
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateControlsConfig((prev) => ({
+                          ...prev,
+                          trackpadMode: !prev.trackpadMode,
+                        }))
+                      }
+                      aria-pressed={controlsConfig.trackpadMode}
+                      className={`flex w-full items-center justify-between rounded-xl border px-3 py-2.5 text-left transition ${
+                        controlsConfig.trackpadMode
+                          ? 'border-emerald-400/50 bg-emerald-500/15 text-emerald-200'
+                          : 'border-white/10 bg-slate-950/60 text-slate-300 hover:bg-white/5'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Laptop className="h-4 w-4 shrink-0 text-emerald-400" />
+                        <div>
+                          <div className="text-xs font-bold">Mode Trackpad PC Portable</div>
+                          <div className="text-[10px] text-slate-400">
+                            Visée libre sans clic, [F]/[E] pour tirer, [V] scope
+                          </div>
+                        </div>
+                      </div>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase ${
+                          controlsConfig.trackpadMode
+                            ? 'bg-emerald-400 text-slate-950'
+                            : 'bg-slate-800 text-slate-400'
+                        }`}
+                      >
+                        {controlsConfig.trackpadMode ? 'ACTIF' : 'OFF'}
+                      </span>
+                    </button>
+                  </div>
+
+                  {/* Right: Crosshair Customizer */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold uppercase tracking-wider text-cyan-300">
+                        Crosshair
+                      </span>
+                      <div className="flex h-10 w-16 items-center justify-center rounded-lg border border-white/15 bg-[#0a1220]">
+                        <PvpCrosshair config={controlsConfig.crosshair} />
+                      </div>
+                    </div>
+
+                    {/* Style */}
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {(
+                        [
+                          { id: 'cross', label: 'Croix' },
+                          { id: 'dot', label: 'Point' },
+                          { id: 'cross-dot', label: 'Croix+Pt' },
+                          { id: 'circle', label: 'Cercle' },
+                        ] as { id: CrosshairStyle; label: string }[]
+                      ).map((opt) => (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() =>
+                            updateControlsConfig((prev) => ({
+                              ...prev,
+                              crosshair: { ...prev.crosshair, style: opt.id },
+                            }))
+                          }
+                          className={`rounded-lg border px-1.5 py-1 text-[10px] font-bold transition ${
+                            controlsConfig.crosshair.style === opt.id
+                              ? 'border-cyan-400 bg-cyan-500/20 text-cyan-200'
+                              : 'border-white/10 bg-slate-950/60 text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Colors */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-semibold text-slate-400">Couleur :</span>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {CROSSHAIR_COLOR_PRESETS.map((c) => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            title={c.label}
+                            aria-label={`Couleur crosshair ${c.label}`}
+                            onClick={() =>
+                              updateControlsConfig((prev) => ({
+                                ...prev,
+                                crosshair: { ...prev.crosshair, color: c.hex },
+                              }))
+                            }
+                            className={`h-5 w-5 rounded-full border transition ${
+                              controlsConfig.crosshair.color === c.hex
+                                ? 'scale-110 border-white ring-2 ring-cyan-400/70'
+                                : 'border-white/25 opacity-80 hover:opacity-100'
+                            }`}
+                            style={{ backgroundColor: c.hex }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Size, Thickness, Gap */}
+                    <div className="grid grid-cols-3 gap-2 text-[10px] text-slate-400">
+                      <label className="block">
+                        Taille ({controlsConfig.crosshair.size})
+                        <input
+                          type="range"
+                          min={3}
+                          max={16}
+                          value={controlsConfig.crosshair.size}
+                          onChange={(e) =>
+                            updateControlsConfig((prev) => ({
+                              ...prev,
+                              crosshair: { ...prev.crosshair, size: Number(e.target.value) },
+                            }))
+                          }
+                          className="w-full accent-cyan-400"
+                        />
+                      </label>
+                      <label className="block">
+                        Épaisseur ({controlsConfig.crosshair.thickness})
+                        <input
+                          type="range"
+                          min={1}
+                          max={4}
+                          value={controlsConfig.crosshair.thickness}
+                          onChange={(e) =>
+                            updateControlsConfig((prev) => ({
+                              ...prev,
+                              crosshair: { ...prev.crosshair, thickness: Number(e.target.value) },
+                            }))
+                          }
+                          className="w-full accent-cyan-400"
+                        />
+                      </label>
+                      <label className="block">
+                        Écart ({controlsConfig.crosshair.gap})
+                        <input
+                          type="range"
+                          min={0}
+                          max={10}
+                          value={controlsConfig.crosshair.gap}
+                          onChange={(e) =>
+                            updateControlsConfig((prev) => ({
+                              ...prev,
+                              crosshair: { ...prev.crosshair, gap: Number(e.target.value) },
+                            }))
+                          }
+                          className="w-full accent-cyan-400"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                </div>
 
                 {/* Play Modes */}
                 <div className="grid gap-3 sm:grid-cols-2">

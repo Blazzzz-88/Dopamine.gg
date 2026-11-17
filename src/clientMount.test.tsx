@@ -814,6 +814,10 @@ describe('Client mount smoke test (jsdom + StrictMode)', () => {
     expect(container.textContent).toContain('ARÈNE 1V1 EN LIGNE');
     expect(container.textContent).toContain('Matchmaking Rapide');
     expect(container.textContent).toContain('Créer un salon privé');
+    expect(container.textContent).toContain('Mode Trackpad PC Portable');
+    expect(container.textContent).toContain('Crosshair');
+    expect(container.textContent).toContain('Croix');
+    expect(container.textContent).toContain('Point');
     expect(container.textContent).toContain(item.weaponName);
 
     const backBtn = Array.from(container.querySelectorAll('button')).find((b) =>
