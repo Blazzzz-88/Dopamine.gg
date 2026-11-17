@@ -26,7 +26,11 @@ import {
   rollSkinFromCrate,
 } from '../utils/rng';
 import { soundEngine } from '../utils/sound';
-import { BASE_INVENTORY_CAPACITY } from '../utils/storage';
+import {
+  BASE_INVENTORY_CAPACITY,
+  getNextStorageUpgradeCost,
+  STORAGE_UPGRADE_STEP,
+} from '../utils/storage';
 import { CrateEmblem } from './CrateEmblem';
 import { DropRevealModal } from './DropRevealModal';
 import { RouletteReel } from './RouletteReel';
@@ -50,10 +54,11 @@ interface CaseOpeningViewProps {
   onSpendCredits: (amount: number) => boolean;
   onAddItemsToInventory: (items: InventoryItem[], crateName: string) => void;
   onSellItemsFromReveal: (itemsToKeep: InventoryItem[], soldValue: number) => void;
+  onUpgradeStorage?: () => void;
 }
 
-export type OpenQuantity = 1 | 2 | 3 | 5 | 10;
-export const OPEN_QUANTITIES: readonly OpenQuantity[] = [1, 2, 3, 5, 10];
+export type OpenQuantity = 1 | 2 | 3 | 5 | 10 | 50;
+export const OPEN_QUANTITIES: readonly OpenQuantity[] = [1, 2, 3, 5, 10, 50];
 
 const WINNING_INDEX = 42;
 const STRIP_LENGTH = 54;
@@ -67,6 +72,7 @@ export const CaseOpeningView: React.FC<CaseOpeningViewProps> = ({
   onSpendCredits,
   onAddItemsToInventory,
   onSellItemsFromReveal,
+  onUpgradeStorage,
 }) => {
   const { inspectWeapon } = useWeaponInspector();
   const [quantity, setQuantity] = useState<OpenQuantity>(1);
@@ -97,6 +103,8 @@ export const CaseOpeningView: React.FC<CaseOpeningViewProps> = ({
   const availableSlots = Math.max(0, inventoryCapacity - inventoryCount);
   const hasSpaceForQty = availableSlots >= quantity;
   const durationMs = turboMode ? 1550 : 4700;
+  const upgradeCost = getNextStorageUpgradeCost(inventoryCapacity);
+  const canAffordUpgrade = balance >= upgradeCost && Boolean(onUpgradeStorage);
 
   const handleQuantityChange = (q: OpenQuantity) => {
     if (isSpinning) return;
@@ -319,6 +327,15 @@ export const CaseOpeningView: React.FC<CaseOpeningViewProps> = ({
           </div>
         </div>
 
+        {reelJobs.length > 3 && (
+          <div className="relative z-10 mt-4 flex items-center justify-between text-xs text-accent-200/60">
+            <span className="font-semibold text-accent-300">
+              {reelJobs.length} roulettes configurées
+            </span>
+            <span>Défilez vers le bas pour voir toutes les caisses (#{1} à #{reelJobs.length})</span>
+          </div>
+        )}
+
         <div
           className={`relative z-10 mt-6 space-y-3 ${
             reelJobs.length > 2
@@ -358,11 +375,25 @@ export const CaseOpeningView: React.FC<CaseOpeningViewProps> = ({
 
           <div className="flex w-full flex-wrap items-center justify-end gap-3 sm:w-auto">
             {!hasSpaceForQty && !isSpinning && (
-              <div className="flex items-center gap-1.5 rounded-xl border border-rose-400/35 bg-rose-500/10 px-4 py-3 text-xs font-bold text-rose-200">
-                <PackageOpen className="h-4 w-4" />
-                {availableSlots === 0
-                  ? `Inventaire plein (${inventoryCount}/${inventoryCapacity})`
-                  : `Places insuffisantes (${availableSlots} libre${availableSlots > 1 ? 's' : ''})`}
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-1.5 rounded-xl border border-rose-400/35 bg-rose-500/10 px-4 py-3 text-xs font-bold text-rose-200">
+                  <PackageOpen className="h-4 w-4" />
+                  {availableSlots === 0
+                    ? `Inventaire plein (${inventoryCount}/${inventoryCapacity})`
+                    : `Places insuffisantes (${availableSlots} libre${availableSlots > 1 ? 's' : ''})`}
+                </div>
+
+                {onUpgradeStorage && (
+                  <button
+                    type="button"
+                    disabled={!canAffordUpgrade}
+                    onClick={onUpgradeStorage}
+                    className="flex items-center gap-1.5 rounded-xl border border-accent-400/35 bg-accent-500/15 px-3.5 py-3 text-xs font-bold text-accent-200 transition hover:bg-accent-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                    title={`Ajouter +${STORAGE_UPGRADE_STEP} places de stockage pour ${formatCredits(upgradeCost)}`}
+                  >
+                    <span>+{STORAGE_UPGRADE_STEP} places ({formatCredits(upgradeCost)})</span>
+                  </button>
+                )}
               </div>
             )}
 

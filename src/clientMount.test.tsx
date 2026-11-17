@@ -692,13 +692,13 @@ describe('Client mount smoke test (jsdom + StrictMode)', () => {
     container.remove();
   });
 
-  it('permet de sélectionner 5x et 10x caisses et adapte le coût, les roulettes et l’affichage', async () => {
+  it('permet de sélectionner 5x, 10x et 50x caisses et adapte le coût, les roulettes et l’affichage', async () => {
     localStorage.clear();
     savePersistedState({
       ...createInitialState(),
       balance: 50000,
       inventory: [],
-      inventoryCapacity: 25,
+      inventoryCapacity: 100,
     });
 
     const container = document.createElement('div');
@@ -729,11 +729,11 @@ describe('Client mount smoke test (jsdom + StrictMode)', () => {
       });
     }
 
-    // Vérifier la présence des sélecteurs 1x, 2x, 3x, 5x, 10x
+    // Vérifier la présence des sélecteurs 1x, 2x, 3x, 5x, 10x, 50x
     const qButtons = Array.from(container.querySelectorAll('button')).filter((b) =>
-      ['1x', '2x', '3x', '5x', '10x'].includes(b.textContent?.trim() ?? '')
+      ['1x', '2x', '3x', '5x', '10x', '50x'].includes(b.textContent?.trim() ?? '')
     );
-    expect(qButtons.map((b) => b.textContent?.trim())).toEqual(['1x', '2x', '3x', '5x', '10x']);
+    expect(qButtons.map((b) => b.textContent?.trim())).toEqual(['1x', '2x', '3x', '5x', '10x', '50x']);
 
     // Clic sur 5x
     const btn5x = qButtons.find((b) => b.textContent?.trim() === '5x');
@@ -762,6 +762,21 @@ describe('Client mount smoke test (jsdom + StrictMode)', () => {
     );
     expect(openBtn10?.textContent?.replace(/\s+/g, ' ')).toContain('1 200');
     expect(container.innerHTML).toContain('Caisse #10');
+
+    // Clic sur 50x
+    const btn50x = qButtons.find((b) => b.textContent?.trim() === '50x');
+    await act(async () => {
+      btn50x?.click();
+    });
+    await new Promise((r) => setTimeout(r, 60));
+
+    // Le bouton d'achat doit afficher le coût x50 (120 * 50 = 6 000 CR)
+    const openBtn50 = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Acheter & Ouvrir')
+    );
+    expect(openBtn50?.textContent?.replace(/\s+/g, ' ')).toContain('6 000');
+    expect(container.innerHTML).toContain('Caisse #50');
+    expect(container.innerHTML).toContain('50 roulettes configurées');
 
     await act(async () => {
       root.unmount();

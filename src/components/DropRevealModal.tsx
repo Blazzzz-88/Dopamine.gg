@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Check, Coins, RotateCcw, Sparkles, X } from 'lucide-react';
-import { RARITIES, WEAPON_CLASS_LABELS } from '../data/rarities';
-import { InventoryItem } from '../types/casino';
+import { RARITIES, RARITY_ORDER, WEAPON_CLASS_LABELS } from '../data/rarities';
+import { InventoryItem, RarityId } from '../types/casino';
 import { formatCredits } from '../utils/rng';
 import { WeaponSilhouette } from './WeaponSilhouette';
 import { useWeaponInspector } from '../context/WeaponInspectorContext';
@@ -36,6 +36,22 @@ export const DropRevealModal: React.FC<DropRevealModalProps> = ({
     items.find((it) => RARITIES[it.rarity].order === highestOrder) ?? items[0];
   const highlightRarity = RARITIES[highlightItem.rarity];
   const isCompact = items.length >= 5;
+  const isLargeBatch = items.length >= 20;
+
+  const [filterRarity, setFilterRarity] = useState<'all' | RarityId>('all');
+
+  const rarityCounts = useMemo(() => {
+    const counts: Partial<Record<RarityId, number>> = {};
+    for (const it of items) {
+      counts[it.rarity] = (counts[it.rarity] ?? 0) + 1;
+    }
+    return counts;
+  }, [items]);
+
+  const filteredItems = useMemo(() => {
+    if (filterRarity === 'all') return items;
+    return items.filter((it) => it.rarity === filterRarity);
+  }, [items, filterRarity]);
 
   return (
     <AnimatePresence>
@@ -51,7 +67,9 @@ export const DropRevealModal: React.FC<DropRevealModalProps> = ({
           exit={{ scale: 0.94, opacity: 0 }}
           transition={{ type: 'spring', stiffness: 320, damping: 26 }}
           className={`relative w-full overflow-hidden rounded-3xl border bg-surface-panel p-5 sm:p-7 shadow-2xl transition-all ${
-            items.length > 3
+            items.length >= 10
+              ? 'max-w-6xl max-h-[92vh] flex flex-col'
+              : items.length > 3
               ? 'max-w-5xl max-h-[92vh] flex flex-col'
               : 'max-w-3xl'
           }`}
@@ -101,22 +119,59 @@ export const DropRevealModal: React.FC<DropRevealModalProps> = ({
                 {formatCredits(totalValue)}
               </span>
             </p>
+
+            {items.length >= 10 && (
+              <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setFilterRarity('all')}
+                  className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider transition ${
+                    filterRarity === 'all'
+                      ? 'bg-accent-400 text-accent-950 shadow'
+                      : 'border border-accent-500/25 bg-surface-base text-accent-200/70 hover:text-accent-100'
+                  }`}
+                >
+                  Tous ({items.length})
+                </button>
+                {[...RARITY_ORDER].reverse().map((rid) => {
+                  const count = rarityCounts[rid];
+                  if (!count) return null;
+                  const r = RARITIES[rid];
+                  const active = filterRarity === rid;
+                  return (
+                    <button
+                      key={rid}
+                      type="button"
+                      onClick={() => setFilterRarity((prev) => (prev === rid ? 'all' : rid))}
+                      className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider transition hover:brightness-110"
+                      style={{
+                        backgroundColor: active ? r.color : r.badgeBg,
+                        color: active ? '#050811' : r.color,
+                        border: `1px solid ${active ? r.color : r.borderColor}`,
+                      }}
+                    >
+                      {count}x {r.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           <div
             className={`relative z-10 mt-5 grid gap-3 overflow-y-auto pr-1 ${
-              items.length === 1
+              filteredItems.length === 1
                 ? 'mx-auto max-w-md grid-cols-1'
-                : items.length === 2
+                : filteredItems.length === 2
                 ? 'grid-cols-1 sm:grid-cols-2'
-                : items.length === 3
+                : filteredItems.length === 3
                 ? 'grid-cols-1 sm:grid-cols-3'
-                : items.length <= 5
+                : filteredItems.length <= 5
                 ? 'grid-cols-2 sm:grid-cols-3 md:grid-cols-5'
-                : 'max-h-[52vh] grid-cols-2 sm:grid-cols-3 md:grid-cols-5'
+                : 'max-h-[52vh] grid-cols-2 sm:grid-cols-3 md:grid-cols-5 xl:grid-cols-6'
             }`}
           >
-            {items.map((item, idx) => {
+            {filteredItems.map((item, idx) => {
               const r = RARITIES[item.rarity];
               const isSecret = item.rarity === 'secret';
               return (
@@ -124,13 +179,13 @@ export const DropRevealModal: React.FC<DropRevealModalProps> = ({
                   key={item.instanceId}
                   initial={{ opacity: 0, y: 14, scale: 0.95 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
-                  transition={{ delay: Math.min(idx * 0.04, 0.35) }}
+                  transition={{ delay: Math.min(idx * 0.02, 0.35) }}
                   className="h-full"
                 >
                   <Tilt3D
-                    max={isCompact ? 8 : 11}
-                    hoverScale={1.02}
-                    glare
+                    max={isLargeBatch ? 0 : isCompact ? 8 : 11}
+                    hoverScale={isLargeBatch ? 1.01 : 1.02}
+                    glare={!isLargeBatch}
                     className={`relative flex h-full flex-col justify-between rounded-2xl border bg-surface-card ${
                       isCompact ? 'p-2.5 sm:p-3' : 'p-4'
                     }`}

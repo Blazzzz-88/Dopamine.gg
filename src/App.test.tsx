@@ -46,9 +46,10 @@ describe('Rendu des composants principaux (SSR smoke test)', () => {
     expect(html).toContain('3x');
     expect(html).toContain('5x');
     expect(html).toContain('10x');
+    expect(html).toContain('50x');
   });
 
-  it('rend DropRevealModal avec un drop groupé de 5 ou 10 skins', () => {
+  it('rend DropRevealModal avec un drop groupé de 5, 10 ou 50 skins', () => {
     const crate = CRATES[0];
     const fiveItems = Array.from({ length: 5 }, (_, idx) =>
       createInventoryItem(crate, crate.skins[idx % crate.skins.length], 'ouverture')
@@ -83,6 +84,23 @@ describe('Rendu des composants principaux (SSR smoke test)', () => {
       />
     );
     expect(html10).toContain('10 skins obtenus !');
+
+    const fiftyItems = Array.from({ length: 50 }, (_, idx) =>
+      createInventoryItem(crate, crate.skins[idx % crate.skins.length], 'ouverture')
+    );
+    const html50 = renderToStaticMarkup(
+      <DropRevealModal
+        items={fiftyItems}
+        cratePrice={crate.price}
+        canReopen={true}
+        onKeepAll={() => {}}
+        onSellItem={() => {}}
+        onSellAll={() => {}}
+        onReopen={() => {}}
+      />
+    );
+    expect(html50).toContain('50 skins obtenus !');
+    expect(html50).toContain('Tous (50)');
   });
 
   it('rend InventoryView, UpgraderView et StatsAndGuideView sans erreur', () => {

@@ -1161,6 +1161,7 @@ export function App() {
                   onSpendCredits={handleSpendCredits}
                   onAddItemsToInventory={handleAddItemsToInventory}
                   onSellItemsFromReveal={handleSellItemsFromReveal}
+                  onUpgradeStorage={handleUpgradeStorage}
                 />
               </motion.div>
             )}
