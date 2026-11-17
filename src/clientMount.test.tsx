@@ -551,13 +551,14 @@ describe('Client mount smoke test (jsdom + StrictMode)', () => {
     });
 
     const menuItems = Array.from(container.querySelectorAll('button[role="menuitem"]'));
-    expect(menuItems.length).toBe(2);
+    expect(menuItems.length).toBe(3);
     expect(menuItems[0].textContent).toContain('Zombie');
-    expect(menuItems[1].textContent).toContain('Défis');
-    expect(menuItems[1].textContent).toContain('0/3');
+    expect(menuItems[1].textContent).toContain('1V1 En ligne');
+    expect(menuItems[2].textContent).toContain('Défis');
+    expect(menuItems[2].textContent).toContain('0/3');
 
     await act(async () => {
-      (menuItems[1] as HTMLButtonElement).click();
+      (menuItems[2] as HTMLButtonElement).click();
     });
     await new Promise((r) => setTimeout(r, 80));
 
@@ -761,6 +762,68 @@ describe('Client mount smoke test (jsdom + StrictMode)', () => {
     );
     expect(openBtn10?.textContent?.replace(/\s+/g, ' ')).toContain('1 200');
     expect(container.innerHTML).toContain('Caisse #10');
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it('affiche le mode 1V1 En ligne dans le menu défilant et permet d’ouvrir l’arène 1V1 avec les armes des caisses', async () => {
+    localStorage.clear();
+    const crate = CRATES[0];
+    const weaponSkin = crate.skins.find((s) => s.weaponClass === 'fusil') ?? crate.skins[0];
+    const item = createInventoryItem(crate, weaponSkin, 'ouverture');
+    savePersistedState({
+      ...createInitialState(),
+      inventory: [item],
+      equippedWeaponId: item.instanceId,
+    });
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <StrictMode>
+          <App />
+        </StrictMode>
+      );
+    });
+    await new Promise((r) => setTimeout(r, 80));
+
+    // Ouvrir le menu défilant "+" des crédits
+    const plusBtn = container.querySelector('button[aria-label="Gagner des crédits"]') as HTMLButtonElement;
+    expect(plusBtn).toBeTruthy();
+
+    await act(async () => {
+      plusBtn.click();
+    });
+    await new Promise((r) => setTimeout(r, 60));
+
+    const menuItems = Array.from(container.querySelectorAll('[role="menuitem"]'));
+    const pvpItem = menuItems.find((el) => el.textContent?.includes('1V1 En ligne')) as HTMLButtonElement | undefined;
+    expect(pvpItem).toBeDefined();
+
+    await act(async () => {
+      pvpItem?.click();
+    });
+    await new Promise((r) => setTimeout(r, 80));
+
+    expect(container.textContent).toContain('ARÈNE 1V1 EN LIGNE');
+    expect(container.textContent).toContain('Matchmaking Rapide');
+    expect(container.textContent).toContain('Créer un salon privé');
+    expect(container.textContent).toContain(item.weaponName);
+
+    const backBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Retour Casino')
+    );
+    await act(async () => {
+      backBtn?.click();
+    });
+    await new Promise((r) => setTimeout(r, 60));
+    expect(container.textContent).not.toContain('ARÈNE 1V1 EN LIGNE');
 
     await act(async () => {
       root.unmount();

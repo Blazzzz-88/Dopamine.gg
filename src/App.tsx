@@ -35,6 +35,7 @@ import { UpgraderView } from './components/UpgraderView';
 import { ContractView } from './components/ContractView';
 import { StatsAndGuideView } from './components/StatsAndGuideView';
 import { ZombieGameView } from './components/ZombieGameView';
+import { PvpArenaView } from './components/PvpArenaView';
 import { ChallengesModal } from './components/ChallengesModal';
 import { WeaponInspectModal } from './components/WeaponInspectModal';
 import { TypewriterText } from './components/TypewriterText';
@@ -102,7 +103,7 @@ export function App() {
     }
     return state;
   });
-  const [pageMode, setPageMode] = useState<'casino' | 'zombie'>('casino');
+  const [pageMode, setPageMode] = useState<'casino' | 'zombie' | 'pvp'>('casino');
   const [activeTab, setActiveTab] = useState<NavTab>('boutique');
   const [activeCrate, setActiveCrate] = useState<CrateDefinition | null>(null);
   const [upgraderSeedId, setUpgraderSeedId] = useState<string | null>(null);
@@ -998,6 +999,24 @@ export function App() {
     [pushToast]
   );
 
+  const handleExitPvpMode = useCallback(
+    (earnedCredits: number, goToShop: boolean) => {
+      if (earnedCredits > 0) {
+        setPersisted((prev) => ({
+          ...prev,
+          balance: prev.balance + earnedCredits,
+        }));
+        pushToast(`Récompense 1V1 : +${formatCredits(earnedCredits)}`);
+      }
+      setPageMode('casino');
+      if (goToShop) {
+        setActiveTab('boutique');
+        setActiveCrate(null);
+      }
+    },
+    [pushToast]
+  );
+
   const handleResetSession = useCallback(() => {
     soundEngine.playClick();
     setUpgraderSeedId(null);
@@ -1030,6 +1049,17 @@ export function App() {
           onExit={(bankedCredits) => handleExitZombieMode(bankedCredits, false)}
           onGoToShop={(bankedCredits) => handleExitZombieMode(bankedCredits, true)}
         />
+      ) : pageMode === 'pvp' ? (
+        <PvpArenaView
+          inventory={persisted.inventory}
+          equippedWeaponId={persisted.equippedWeaponId}
+          equippedKnifeId={persisted.equippedKnifeId}
+          balance={persisted.balance}
+          playerName={currentUsername || currentUser?.email?.split('@')[0] || null}
+          userId={currentUser?.id ?? null}
+          onExit={(earnedCredits) => handleExitPvpMode(earnedCredits, false)}
+          onGoToShop={(earnedCredits) => handleExitPvpMode(earnedCredits, true)}
+        />
       ) : (
       <div className="relative min-h-screen bg-surface-base text-accent-50 transition-colors duration-300">
       {/* Ambient dynamic architectural background */}
@@ -1061,6 +1091,9 @@ export function App() {
           onOpenZombie={() => {
             syncDailyDateRollover();
             setPageMode('zombie');
+          }}
+          onOpenPvp={() => {
+            setPageMode('pvp');
           }}
           onOpenChallenges={() => {
             syncDailyDateRollover();

@@ -18,6 +18,7 @@ import {
   Cloud,
   RefreshCw,
   Home,
+  Swords,
 } from 'lucide-react';
 import { ThemeId, THEMES } from '../data/themes';
 import { NavTab } from '../types/casino';
@@ -33,6 +34,7 @@ interface NavbarProps {
   soundEnabled: boolean;
   onToggleSound: () => void;
   onOpenZombie: () => void;
+  onOpenPvp: () => void;
   onOpenChallenges: () => void;
   challengesCompletedCount?: number;
   themeId: ThemeId;
@@ -60,6 +62,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   soundEnabled,
   onToggleSound,
   onOpenZombie,
+  onOpenPvp,
   onOpenChallenges,
   challengesCompletedCount = 0,
   themeId,
@@ -349,6 +352,34 @@ export const Navbar: React.FC<NavbarProps> = ({
                       </div>
                     </div>
                   </div>
+                </button>
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    soundEngine.playClick();
+                    setCreditMenuOpen(false);
+                    onOpenPvp();
+                  }}
+                  className="mt-1 flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-left transition hover:bg-cyan-500/15"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-cyan-400/35 bg-cyan-500/15 text-cyan-300">
+                      <Swords className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <div className="font-display text-xs font-bold uppercase tracking-wider text-accent-50">
+                        1V1 En ligne
+                      </div>
+                      <div className="text-[10px] text-accent-200/65">
+                        Arène FPS • +300 CR / victoire
+                      </div>
+                    </div>
+                  </div>
+                  <span className="rounded-full bg-cyan-500/20 px-2 py-0.5 text-[10px] font-bold uppercase text-cyan-300">
+                    PVP
+                  </span>
                 </button>
 
                 <button
