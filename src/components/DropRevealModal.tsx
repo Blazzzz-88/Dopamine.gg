@@ -28,16 +28,6 @@ export const DropRevealModal: React.FC<DropRevealModalProps> = ({
   onReopen,
 }) => {
   const { inspectWeapon } = useWeaponInspector();
-  if (items.length === 0) return null;
-
-  const totalValue = items.reduce((sum, it) => sum + it.value, 0);
-  const highestOrder = Math.max(...items.map((it) => RARITIES[it.rarity].order));
-  const highlightItem =
-    items.find((it) => RARITIES[it.rarity].order === highestOrder) ?? items[0];
-  const highlightRarity = RARITIES[highlightItem.rarity];
-  const isCompact = items.length >= 5;
-  const isLargeBatch = items.length >= 20;
-
   const [filterRarity, setFilterRarity] = useState<'all' | RarityId>('all');
 
   const rarityCounts = useMemo(() => {
@@ -52,6 +42,16 @@ export const DropRevealModal: React.FC<DropRevealModalProps> = ({
     if (filterRarity === 'all') return items;
     return items.filter((it) => it.rarity === filterRarity);
   }, [items, filterRarity]);
+
+  if (items.length === 0) return null;
+
+  const totalValue = items.reduce((sum, it) => sum + it.value, 0);
+  const highestOrder = Math.max(...items.map((it) => RARITIES[it.rarity].order));
+  const highlightItem =
+    items.find((it) => RARITIES[it.rarity].order === highestOrder) ?? items[0];
+  const highlightRarity = RARITIES[highlightItem.rarity];
+  const isCompact = items.length >= 5;
+  const isLargeBatch = items.length >= 20;
 
   return (
     <AnimatePresence>
