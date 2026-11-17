@@ -343,10 +343,12 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
     yaw: PVP_SPAWN_POINTS[0].yaw,
     pitch: 0,
     isMoving: false,
+    bobTime: 0,
     isCrouching: false,
     crouchBlend: 0,
     adsZoom: false,
     adsBlend: 0,
+    drawBlend: 0,
     isGrounded: true,
     lastShotAt: 0,
     reloadingUntil: 0,
@@ -377,9 +379,59 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
   }, [primaryProfile]);
 
   useEffect(() => {
-    swapWeaponFnRef.current?.(equippedItem);
+    const st = gameStateRef.current;
+    st.reloadingUntil = 0;
+    st.adsZoom = false;
+    st.adsBlend = 0;
+    st.drawBlend = 1.0;
+    firearmAnimatorRef.current?.cancel();
+    setIsReloading(false);
     setIsScoped(false);
+    swapWeaponFnRef.current?.(equippedItem);
   }, [equippedItem]);
+
+  const switchToSlot = useCallback(
+    (targetSlot: ZombieSlot) => {
+      if (phaseRef.current !== 'playing' && phaseRef.current !== 'countdown') return;
+      if (targetSlot === 1) {
+        if (effectiveSlotRef.current === 1) return;
+        const st = gameStateRef.current;
+        st.reloadingUntil = 0;
+        st.adsZoom = false;
+        st.adsBlend = 0;
+        st.drawBlend = 1.0;
+        setIsReloading(false);
+        setIsScoped(false);
+        soundEngine.playBoltRack(
+          resolveWeaponArchetype(primaryItem.weaponClass, primaryItem.weaponName)
+        );
+        setActiveSlot(1);
+        return;
+      }
+
+      if (!knifeItem) return;
+      if (effectiveSlotRef.current !== 2) {
+        const st = gameStateRef.current;
+        st.reloadingUntil = 0;
+        st.adsZoom = false;
+        st.adsBlend = 0;
+        st.drawBlend = 0;
+        firearmAnimatorRef.current?.cancel();
+        setIsReloading(false);
+        setIsScoped(false);
+        setActiveSlot(2);
+      } else {
+        const kAnim = knifeAnimatorRef.current;
+        if (kAnim && kAnim.getState() !== 'attack1' && kAnim.getState() !== 'attack2') {
+          kAnim.triggerDraw(false);
+          soundEngine.playKnifeDraw(kAnim.knifeType);
+        }
+      }
+    },
+    [primaryItem, knifeItem]
+  );
+  const switchToSlotRef = useRef(switchToSlot);
+  switchToSlotRef.current = switchToSlot;
 
   const localProfile: PvpPlayerProfile = useMemo(
     () => ({
@@ -425,7 +477,17 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
     st.isCrouching = false;
     st.adsZoom = false;
     st.adsBlend = 0;
+    st.drawBlend = 1.0;
     st.reloadingUntil = 0;
+    firearmAnimatorRef.current?.cancel();
+    if (combatProfileRef.current.isMelee && knifeAnimatorRef.current) {
+      knifeAnimatorRef.current.triggerDraw(true);
+      soundEngine.playKnifeDraw(knifeAnimatorRef.current.knifeType);
+    } else if (!combatProfileRef.current.isMelee) {
+      soundEngine.playBoltRack(
+        resolveWeaponArchetype(equippedRef.current.weaponClass, equippedRef.current.weaponName)
+      );
+    }
 
     st.oppTargetX = oppSpawn.x;
     st.oppTargetZ = oppSpawn.z;
@@ -792,16 +854,43 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
         knifeRestRef.current = entry.knifeRest;
         if (entry.knifeAnim) {
           entry.knifeAnim.triggerDraw(true);
-          soundEngine.playKnifeDraw(entry.knifeAnim.knifeType);
+          if (phaseRef.current === 'countdown' || phaseRef.current === 'playing') {
+            soundEngine.playKnifeDraw(entry.knifeAnim.knifeType);
+          }
+          if (entry.knifeRest) {
+            applyKnifeAnimPose(
+              viewModelRig,
+              weaponMount,
+              fpsHands,
+              entry.knifeRest,
+              cfg.rigPosHip,
+              cfg.rigRotBase,
+              entry.knifeAnim.update(0, performance.now())
+            );
+          }
         }
       } else {
         knifeAnimatorRef.current = null;
         knifeRestRef.current = null;
         firearmAnimatorRef.current = entry.firearmAnim;
         firearmRestRef.current = entry.firearmRest;
+        firearmAnimatorRef.current?.cancel();
         muzzleAnchor.position.copy(entry.muzzleMountPos);
-        viewModelRig.position.set(...cfg.rigPosHip);
-        viewModelRig.rotation.set(...cfg.rigRotBase);
+        gameStateRef.current.drawBlend = 1.0;
+        if (entry.firearmAnim && entry.firearmRest) {
+          applyFirearmAnimPose(
+            viewModelRig,
+            weaponMount,
+            fpsHands,
+            entry.firearmRest,
+            cfg.rigPosHip,
+            cfg.rigRotBase,
+            entry.firearmAnim.update(0, performance.now())
+          );
+        } else {
+          viewModelRig.position.set(...cfg.rigPosHip);
+          viewModelRig.rotation.set(...cfg.rigRotBase);
+        }
       }
     };
 
@@ -945,23 +1034,32 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
       if (profile.isMelee || profile.magSize <= 0) return;
       if (primaryAmmoRef.current >= profile.magSize || st.reloadingUntil > 0) return;
       st.reloadingUntil = performance.now() + profile.reloadMs;
+      st.adsZoom = false;
       setIsReloading(true);
-      soundEngine.playReload();
-      firearmAnimatorRef.current?.triggerReload(profile.reloadMs);
+      if (firearmAnimatorRef.current) {
+        firearmAnimatorRef.current.triggerReload(profile.reloadMs);
+      } else {
+        soundEngine.playReload();
+      }
     };
 
-    const performShoot = () => {
+    const performShoot = (secondary = false) => {
       if (phaseRef.current !== 'playing') return;
       const st = gameStateRef.current;
       const now = performance.now();
       const profile = combatProfileRef.current;
 
       if (st.reloadingUntil > 0) return;
-      if (now - st.lastShotAt < profile.fireRateMs) return;
+      const cooldown = profile.isMelee && secondary ? profile.fireRateMs * 1.4 : profile.fireRateMs;
+      if (now - st.lastShotAt < cooldown) return;
 
       if (!profile.isMelee && primaryAmmoRef.current <= 0) {
         triggerReload();
         return;
+      }
+
+      if (!profile.isMelee && firearmAnimatorRef.current?.getState() === 'inspect') {
+        firearmAnimatorRef.current.cancel();
       }
 
       st.lastShotAt = now;
@@ -979,9 +1077,9 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
         soundEngine.playGunshot(profile.suppressed, profile.isSniper);
       } else {
         st.recoilZ = 0.08;
-        const secondary = Math.random() < 0.35;
-        knifeAnimatorRef.current?.triggerAttack(secondary);
-        soundEngine.playMeleeSlash(secondary, knifeAnimatorRef.current?.knifeType ?? 'couteau');
+        const kAnim = knifeAnimatorRef.current;
+        kAnim?.triggerAttack(secondary);
+        soundEngine.playMeleeSlash(secondary, kAnim?.knifeType ?? 'couteau');
       }
 
       // Compute ray with spread
@@ -1011,7 +1109,8 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
         if (oppHits.length > 0 && oppHits[0].distance < maxWallDist) {
           hitTarget = true;
           hitPart = oppHits[0].object.userData.hitPart === 'head' ? 'head' : 'body';
-          damage = computePvpDamage(profile, hitPart, oppHits[0].distance);
+          const rawDamage = computePvpDamage(profile, hitPart, oppHits[0].distance);
+          damage = profile.isMelee && secondary ? Math.round(rawDamage * 1.45) : rawDamage;
           hitPoint = oppHits[0].point;
 
           st.oppHitFlash = 1;
@@ -1052,22 +1151,51 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
         e.preventDefault();
       }
       keys.add(e.code);
-      if (e.code === 'KeyR') triggerReload();
-      if (e.code === 'Digit1') setActiveSlot(1);
-      if (e.code === 'Digit2' && knifeItem) setActiveSlot(2);
+      const keyLower = e.key.toLowerCase();
+      const prof = combatProfileRef.current;
+
+      if (e.code === 'Digit1' || e.code === 'Numpad1' || e.key === '1' || e.key === '&') {
+        switchToSlotRef.current(1);
+        return;
+      }
+      if (e.code === 'Digit2' || e.code === 'Numpad2' || e.key === '2' || e.key === 'é') {
+        switchToSlotRef.current(2);
+        return;
+      }
+
+      if (keyLower === 'r') {
+        if (prof.isMelee) {
+          knifeAnimatorRef.current?.triggerInspect();
+        } else {
+          triggerReload();
+        }
+      } else if (keyLower === 't') {
+        if (prof.isMelee) {
+          knifeAnimatorRef.current?.triggerInspect();
+        } else if (gameStateRef.current.reloadingUntil === 0) {
+          firearmAnimatorRef.current?.triggerInspect();
+        }
+      }
+
       if (e.code === 'Space' && gameStateRef.current.isGrounded && phaseRef.current === 'playing') {
         gameStateRef.current.velY = 6.2;
         gameStateRef.current.isGrounded = false;
       }
+
       // Trackpad-friendly keyboard fire (F / E) & ADS aim toggle (V)
       if (controlsConfigRef.current.trackpadMode) {
         if ((e.code === 'KeyF' || e.code === 'KeyE') && phaseRef.current === 'playing') {
           keyFireHeld = true;
-          performShoot();
+          performShoot(false);
         }
-        if (e.code === 'KeyV' && !combatProfileRef.current.isMelee && phaseRef.current === 'playing') {
+        if (e.code === 'KeyV' && !prof.isMelee && phaseRef.current === 'playing') {
+          if (firearmAnimatorRef.current?.getState() === 'inspect') {
+            firearmAnimatorRef.current.cancel();
+          }
           gameStateRef.current.adsZoom = !gameStateRef.current.adsZoom;
         }
+      } else if (keyLower === 'f' && prof.isMelee) {
+        knifeAnimatorRef.current?.triggerInspect();
       }
     };
     const onKeyUp = (e: KeyboardEvent) => {
@@ -1082,7 +1210,15 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
       if (e.target !== renderer.domElement) return;
       if (e.button === 2) {
         e.preventDefault();
-        if (!combatProfileRef.current.isMelee) {
+        if (combatProfileRef.current.isMelee) {
+          if (!document.pointerLockElement) {
+            safeRequestPointerLock(renderer.domElement);
+          }
+          performShoot(true);
+        } else {
+          if (firearmAnimatorRef.current?.getState() === 'inspect') {
+            firearmAnimatorRef.current.cancel();
+          }
           gameStateRef.current.adsZoom = true;
         }
         return;
@@ -1095,8 +1231,14 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
         if (!document.pointerLockElement) {
           safeRequestPointerLock(renderer.domElement);
         }
-        performShoot();
+        performShoot(false);
       }
+    };
+
+    const onWheel = (e: WheelEvent) => {
+      if (phaseRef.current !== 'playing' && phaseRef.current !== 'countdown') return;
+      if (Math.abs(e.deltaY) < 4) return;
+      switchToSlotRef.current(effectiveSlotRef.current === 1 ? 2 : 1);
     };
 
     const onMouseUp = (e: MouseEvent) => {
@@ -1214,6 +1356,7 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('pointerlockchange', onPointerLockChange);
     renderer.domElement.addEventListener('contextmenu', onContextMenu);
+    renderer.domElement.addEventListener('wheel', onWheel, { passive: true });
     window.addEventListener('resize', onResize);
 
     let lastTime = performance.now();
@@ -1236,9 +1379,14 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
         setIsReloading(false);
       }
 
-      // Auto-fire for automatic weapons
-      if ((mouseDown || keyFireHeld) && curPhase === 'playing' && combatProfileRef.current.automatic) {
-        performShoot();
+      // Auto-fire for automatic weapons (or continuous melee slashing when pointer-locked)
+      if (
+        (mouseDown || keyFireHeld) &&
+        curPhase === 'playing' &&
+        (combatProfileRef.current.automatic ||
+          (combatProfileRef.current.isMelee && document.pointerLockElement === renderer.domElement))
+      ) {
+        performShoot(false);
       }
 
       // Movement (locked during menu/countdown)
@@ -1284,6 +1432,7 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
         const resolved = resolveArenaCircleCollision(nx, nz, 0.45, arena.colliders, ARENA_LIMIT);
         st.posX = resolved.x;
         st.posZ = resolved.z;
+        st.bobTime += dt * (st.isCrouching ? 6.5 : 9.5);
       }
 
       // Gravity & jump
@@ -1339,6 +1488,7 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
 
       st.recoilZ = THREE.MathUtils.lerp(st.recoilZ, 0, Math.min(1, dt * 16));
       st.recoilPitch = THREE.MathUtils.lerp(st.recoilPitch, 0, Math.min(1, dt * 14));
+      st.drawBlend = Math.max(0, st.drawBlend - dt * 3.4);
 
       // Muzzle flash
       if (st.muzzleFlashTimer > 0) {
@@ -1348,7 +1498,7 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
         muzzleFlashGroup.visible = false;
       }
 
-      // Viewmodel animation (with ADS blend)
+      // Viewmodel procedural animations (Draw, Idle sway, Walk bob, ADS, Reload, Inspect, Melee)
       const cfg = getFPSWeaponViewConfig(
         resolveWeaponArchetype(equippedRef.current.weaponClass, equippedRef.current.weaponName)
       );
@@ -1356,34 +1506,76 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
       const baseY = THREE.MathUtils.lerp(cfg.rigPosHip[1], cfg.rigPosAds[1], st.adsBlend);
       const baseZ = THREE.MathUtils.lerp(cfg.rigPosHip[2], cfg.rigPosAds[2], st.adsBlend);
       const rotMul = 1 - st.adsBlend;
+      const bobMul = 1 - st.adsBlend * 0.72;
+      const walkBobX =
+        (st.isMoving ? Math.sin(st.bobTime) * 0.012 : Math.sin(now * 0.0022) * 0.003) * bobMul;
+      const walkBobY =
+        (st.isMoving ? Math.abs(Math.cos(st.bobTime)) * -0.014 : Math.cos(now * 0.0018) * 0.003) *
+        bobMul;
+      const drawEase = st.drawBlend * st.drawBlend;
+      const drawDipY = -0.14 * drawEase;
+      const drawPitchX = -0.26 * drawEase;
+      const drawRollZ = 0.18 * drawEase;
 
-      if (firearmAnimatorRef.current && firearmRestRef.current) {
-        applyFirearmAnimPose(
-          viewModelRig,
-          weaponMount,
-          fpsHands,
-          firearmRestRef.current,
-          [baseX, baseY, baseZ + st.recoilZ],
-          [
-            cfg.rigRotBase[0] * rotMul + st.recoilPitch,
-            cfg.rigRotBase[1] * rotMul,
-            cfg.rigRotBase[2] * rotMul,
-          ],
-          firearmAnimatorRef.current.update(dt, now)
-        );
-      } else if (knifeAnimatorRef.current && knifeRestRef.current) {
+      const knifeAnim = knifeAnimatorRef.current;
+      const knifeRest = knifeRestRef.current;
+      const firearmAnim = firearmAnimatorRef.current;
+      const firearmRest = firearmRestRef.current;
+
+      if (knifeAnim && knifeRest && activeWeaponModel) {
+        const knifePose = knifeAnim.update(dt, now);
+        const moveBobX = st.isMoving ? Math.sin(st.bobTime) * 0.011 : 0;
+        const moveBobY = st.isMoving ? Math.abs(Math.cos(st.bobTime)) * -0.013 : 0;
         applyKnifeAnimPose(
           viewModelRig,
           weaponMount,
           fpsHands,
-          knifeRestRef.current,
-          [baseX, baseY, baseZ + st.recoilZ],
+          knifeRest,
+          [baseX, baseY, baseZ],
+          [cfg.rigRotBase[0], cfg.rigRotBase[1], cfg.rigRotBase[2]],
+          knifePose,
+          moveBobX,
+          moveBobY
+        );
+        camera.rotation.x += knifePose.cameraPunch.pitch;
+        camera.rotation.z = knifePose.cameraPunch.roll;
+      } else if (firearmAnim && firearmRest && activeWeaponModel) {
+        const fPose = firearmAnim.update(dt, now);
+        for (const ev of fPose.events) {
+          if (ev === 'mag_out') soundEngine.playMagOut(profNow.archetype);
+          else if (ev === 'mag_in') soundEngine.playMagIn(profNow.archetype);
+          else if (ev === 'bolt_rack') soundEngine.playBoltRack(profNow.archetype);
+          else if (ev === 'inspect_start') soundEngine.playWeaponInspect(profNow.archetype);
+          else if (ev === 'inspect_check') soundEngine.playMagIn(profNow.archetype);
+        }
+        const animBobMul = fPose.state === 'inspect' ? 0.35 : fPose.state === 'reload' ? 0.55 : 1.0;
+        applyFirearmAnimPose(
+          viewModelRig,
+          weaponMount,
+          fpsHands,
+          firearmRest,
+          [baseX, baseY + drawDipY, baseZ + st.recoilZ],
           [
-            cfg.rigRotBase[0] * rotMul + st.recoilPitch,
+            cfg.rigRotBase[0] * rotMul + st.recoilPitch + drawPitchX,
             cfg.rigRotBase[1] * rotMul,
-            cfg.rigRotBase[2] * rotMul,
+            cfg.rigRotBase[2] * rotMul + drawRollZ,
           ],
-          knifeAnimatorRef.current.update(dt, now)
+          fPose,
+          walkBobX * animBobMul,
+          walkBobY * animBobMul
+        );
+      } else {
+        const reloadDip = st.reloadingUntil > 0 ? -0.18 : 0;
+        const reloadRoll = st.reloadingUntil > 0 ? 0.45 : 0;
+        viewModelRig.position.set(
+          baseX + walkBobX,
+          baseY + walkBobY + reloadDip + drawDipY,
+          baseZ + st.recoilZ
+        );
+        viewModelRig.rotation.set(
+          cfg.rigRotBase[0] * rotMul + st.recoilPitch + drawPitchX,
+          cfg.rigRotBase[1] * rotMul,
+          cfg.rigRotBase[2] * rotMul + reloadRoll + drawRollZ
         );
       }
 
@@ -1458,6 +1650,7 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('pointerlockchange', onPointerLockChange);
       renderer.domElement.removeEventListener('contextmenu', onContextMenu);
+      renderer.domElement.removeEventListener('wheel', onWheel);
       window.removeEventListener('resize', onResize);
       if (document.pointerLockElement === renderer.domElement) {
         document.exitPointerLock?.();
@@ -1474,7 +1667,7 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
       muzzleFlashTex.dispose();
       renderer.dispose();
     };
-  }, [clientId, knifeItem]);
+  }, [clientId]);
 
   const activeRarity = RARITIES[equippedItem.rarity];
 
@@ -1665,8 +1858,8 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
             {(!isLocked || controlsConfig.trackpadMode) && (
               <div className="mt-1 text-[10px] text-cyan-300/85">
                 {controlsConfig.trackpadMode
-                  ? 'Mode Trackpad : Glisser pour viser • [F] / [E] Tirer • [V] Viser (AWP) • [R] Recharger'
-                  : 'Cliquez sur l’écran pour viser • ZQSD/WASD • R Recharger • 1/2 Armes'}
+                  ? 'Mode Trackpad : Glisser pour viser • [F]/[E] Tirer • [V] Viser • [T] Inspecter • [R] Recharger • [Ctrl] Accroupir'
+                  : 'Clic droit Viser • [T] Inspecter • [R] Recharger • [Ctrl] Accroupir • 1/2 Armes'}
               </div>
             )}
           </div>
