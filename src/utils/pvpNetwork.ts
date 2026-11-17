@@ -22,6 +22,7 @@ export interface PvpStatePacket {
   pitch: number;
   isMoving: boolean;
   isMelee: boolean;
+  isCrouching?: boolean;
 }
 
 export interface PvpShootPacket {

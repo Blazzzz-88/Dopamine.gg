@@ -6,7 +6,7 @@ export interface PvpPlayer3DModel {
   hitMeshes: THREE.Object3D[];
   setWeaponSwatches: (swatches: [string, string, string], isMelee: boolean) => void;
   getMuzzleWorldPosition: (out: THREE.Vector3) => THREE.Vector3;
-  animate: (isMoving: boolean, pitch: number, dt: number, hitFlash: number) => void;
+  animate: (isMoving: boolean, pitch: number, dt: number, hitFlash: number, isCrouching?: boolean) => void;
   dispose: () => void;
 }
 
@@ -181,6 +181,7 @@ export function createPvpPlayer3DModel(
   bodyGroup.add(weaponGroup);
 
   let walkPhase = 0;
+  let crouchBlend = 0;
 
   return {
     root,
@@ -197,7 +198,11 @@ export function createPvpPlayer3DModel(
       root.updateMatrixWorld(true);
       return muzzlePoint.getWorldPosition(out);
     },
-    animate: (isMoving, pitch, dt, hitFlash) => {
+    animate: (isMoving, pitch, dt, hitFlash, isCrouching = false) => {
+      crouchBlend = THREE.MathUtils.lerp(crouchBlend, isCrouching ? 1 : 0, Math.min(1, dt * 12));
+      bodyGroup.position.y = -0.44 * crouchBlend;
+      bodyGroup.scale.y = 1 - 0.14 * crouchBlend;
+
       if (isMoving) {
         walkPhase += dt * 10.5;
         const swing = Math.sin(walkPhase) * 0.55;

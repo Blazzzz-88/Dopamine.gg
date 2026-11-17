@@ -344,12 +344,15 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
     pitch: 0,
     isMoving: false,
     isCrouching: false,
+    crouchBlend: 0,
+    adsZoom: false,
+    adsBlend: 0,
     isGrounded: true,
     lastShotAt: 0,
     reloadingUntil: 0,
     muzzleFlashTimer: 0,
+    recoilZ: 0,
     recoilPitch: 0,
-    recoilKick: 0,
     // Remote opponent interpolated transform
     oppTargetX: PVP_SPAWN_POINTS[1].x,
     oppTargetZ: PVP_SPAWN_POINTS[1].z,
@@ -360,6 +363,7 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
     oppYaw: PVP_SPAWN_POINTS[1].yaw,
     oppPitch: 0,
     oppIsMoving: false,
+    oppIsCrouching: false,
     oppHitFlash: 0,
     lastNetSendAt: 0,
   });
@@ -415,8 +419,12 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
     st.posZ = mySpawn.z;
     st.yaw = mySpawn.yaw;
     st.pitch = 0;
+    st.recoilZ = 0;
     st.recoilPitch = 0;
-    st.recoilKick = 0;
+    st.crouchBlend = 0;
+    st.isCrouching = false;
+    st.adsZoom = false;
+    st.adsBlend = 0;
     st.reloadingUntil = 0;
 
     st.oppTargetX = oppSpawn.x;
@@ -531,6 +539,7 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
           g.oppTargetYaw = st.yaw;
           g.oppTargetPitch = st.pitch;
           g.oppIsMoving = st.isMoving;
+          g.oppIsCrouching = Boolean(st.isCrouching);
         },
         onOpponentShoot: (shoot) => {
           if (shoot.round !== roundRef.current) return;
@@ -927,6 +936,7 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
       keyFireHeld = false;
       isDraggingLook = false;
       hasFreeLookSample = false;
+      gameStateRef.current.adsZoom = false;
     };
 
     const triggerReload = () => {
@@ -959,11 +969,16 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
         primaryAmmoRef.current -= 1;
         setAmmo(primaryAmmoRef.current);
         st.muzzleFlashTimer = 0.05;
-        st.recoilPitch += profile.recoilKick * 0.065;
-        st.recoilKick += profile.recoilKick;
+        st.recoilZ = profile.recoilKick;
+        st.recoilPitch = profile.recoilKick * 0.45;
+        st.pitch = THREE.MathUtils.clamp(
+          st.pitch + profile.recoilKick * 0.16,
+          -FPS_PITCH_LIMIT,
+          FPS_PITCH_LIMIT
+        );
         soundEngine.playGunshot(profile.suppressed, profile.isSniper);
       } else {
-        st.recoilKick += 0.12;
+        st.recoilZ = 0.08;
         const secondary = Math.random() < 0.35;
         knifeAnimatorRef.current?.triggerAttack(secondary);
         soundEngine.playMeleeSlash(secondary, knifeAnimatorRef.current?.knifeType ?? 'couteau');
@@ -972,7 +987,7 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
       // Compute ray with spread
       const spreadNDC = computeShotSpreadNDC({
         profile,
-        isAiming: isScopedRef.current,
+        isAiming: st.adsZoom && !profile.isMelee && st.reloadingUntil === 0,
         isMoving: st.isMoving,
         isAirborne: !st.isGrounded,
       });
@@ -1033,6 +1048,9 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (phaseRef.current !== 'playing' && phaseRef.current !== 'countdown') return;
+      if (e.code === 'ControlLeft' || e.code === 'ControlRight') {
+        e.preventDefault();
+      }
       keys.add(e.code);
       if (e.code === 'KeyR') triggerReload();
       if (e.code === 'Digit1') setActiveSlot(1);
@@ -1041,14 +1059,14 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
         gameStateRef.current.velY = 6.2;
         gameStateRef.current.isGrounded = false;
       }
-      // Trackpad-friendly keyboard fire (F / E) & AWP scope (V)
+      // Trackpad-friendly keyboard fire (F / E) & ADS aim toggle (V)
       if (controlsConfigRef.current.trackpadMode) {
         if ((e.code === 'KeyF' || e.code === 'KeyE') && phaseRef.current === 'playing') {
           keyFireHeld = true;
           performShoot();
         }
-        if (e.code === 'KeyV' && combatProfileRef.current.isSniper && phaseRef.current === 'playing') {
-          setIsScoped((v) => !v);
+        if (e.code === 'KeyV' && !combatProfileRef.current.isMelee && phaseRef.current === 'playing') {
+          gameStateRef.current.adsZoom = !gameStateRef.current.adsZoom;
         }
       }
     };
@@ -1063,7 +1081,10 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
       if (phaseRef.current !== 'playing' && phaseRef.current !== 'countdown') return;
       if (e.target !== renderer.domElement) return;
       if (e.button === 2) {
-        if (combatProfileRef.current.isSniper) setIsScoped((v) => !v);
+        e.preventDefault();
+        if (!combatProfileRef.current.isMelee) {
+          gameStateRef.current.adsZoom = true;
+        }
         return;
       }
       if (e.button === 0) {
@@ -1078,9 +1099,14 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
       }
     };
 
-    const onMouseUp = () => {
-      mouseDown = false;
-      isDraggingLook = false;
+    const onMouseUp = (e: MouseEvent) => {
+      if (e.button === 2) {
+        gameStateRef.current.adsZoom = false;
+      }
+      if (e.button === 0) {
+        mouseDown = false;
+        isDraggingLook = false;
+      }
     };
 
     const onMouseMove = (e: MouseEvent) => {
@@ -1216,7 +1242,13 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
       }
 
       // Movement (locked during menu/countdown)
-      st.isCrouching = keys.has('ControlLeft') || keys.has('KeyC');
+      st.isCrouching =
+        keys.has('ControlLeft') || keys.has('ControlRight') || keys.has('KeyC');
+      st.crouchBlend = THREE.MathUtils.lerp(
+        st.crouchBlend,
+        st.isCrouching ? 1 : 0,
+        Math.min(1, dt * 12)
+      );
       let moveX = 0;
       let moveZ = 0;
       if (curPhase === 'playing') {
@@ -1265,7 +1297,26 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
         }
       }
 
-      // Camera transform
+      // Camera transform & ADS (all firearms)
+      const profNow = combatProfileRef.current;
+      const firearmBusy = Boolean(firearmAnimatorRef.current?.isBusy());
+      const isAimActive =
+        curPhase === 'playing' &&
+        st.adsZoom &&
+        !profNow.isMelee &&
+        st.reloadingUntil === 0 &&
+        !firearmBusy;
+      st.adsBlend = THREE.MathUtils.lerp(
+        st.adsBlend,
+        isAimActive ? 1 : 0,
+        Math.min(1, dt * 16)
+      );
+      const isScopedNow = isAimActive && profNow.isSniper && st.adsBlend > 0.72;
+      if (isScopedNow !== isScopedRef.current) {
+        isScopedRef.current = isScopedNow;
+        setIsScoped(isScopedNow);
+      }
+
       if (curPhase === 'menu' || curPhase === 'searching' || curPhase === 'waiting_room') {
         const orbitT = now * 0.00018;
         camera.position.set(Math.cos(orbitT) * 16, 7.5, Math.sin(orbitT) * 16);
@@ -1273,21 +1324,21 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
         viewModelRig.visible = false;
         opponentModel.root.visible = false;
       } else {
-        viewModelRig.visible = !isScopedRef.current;
+        viewModelRig.visible = !isScopedNow;
         opponentModel.root.visible = true;
-        const eyeHeight = (st.isCrouching ? 1.15 : 1.62) + st.posY;
+        const eyeHeight = THREE.MathUtils.lerp(1.62, 1.02, st.crouchBlend) + st.posY;
         camera.position.set(st.posX, eyeHeight, st.posZ);
-        camera.rotation.set(
-          THREE.MathUtils.clamp(st.pitch + st.recoilPitch, -FPS_PITCH_LIMIT, FPS_PITCH_LIMIT),
-          st.yaw,
-          0
-        );
-        camera.fov = THREE.MathUtils.lerp(camera.fov, isScopedRef.current ? 22 : 62, 0.25);
-        camera.updateProjectionMatrix();
+        camera.rotation.set(st.pitch, st.yaw, 0);
+        const targetFov = isAimActive ? (profNow.isSniper ? 22 : 44) : 62;
+        if (Math.abs(camera.fov - targetFov) > 0.1) {
+          const zoomSpeed = isScopedNow ? 22 : 14;
+          camera.fov = THREE.MathUtils.lerp(camera.fov, targetFov, Math.min(1, dt * zoomSpeed));
+          camera.updateProjectionMatrix();
+        }
       }
 
-      st.recoilPitch *= Math.pow(0.01, dt);
-      st.recoilKick *= Math.pow(0.015, dt);
+      st.recoilZ = THREE.MathUtils.lerp(st.recoilZ, 0, Math.min(1, dt * 16));
+      st.recoilPitch = THREE.MathUtils.lerp(st.recoilPitch, 0, Math.min(1, dt * 14));
 
       // Muzzle flash
       if (st.muzzleFlashTimer > 0) {
@@ -1297,18 +1348,27 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
         muzzleFlashGroup.visible = false;
       }
 
-      // Viewmodel animation
+      // Viewmodel animation (with ADS blend)
       const cfg = getFPSWeaponViewConfig(
         resolveWeaponArchetype(equippedRef.current.weaponClass, equippedRef.current.weaponName)
       );
+      const baseX = THREE.MathUtils.lerp(cfg.rigPosHip[0], cfg.rigPosAds[0], st.adsBlend);
+      const baseY = THREE.MathUtils.lerp(cfg.rigPosHip[1], cfg.rigPosAds[1], st.adsBlend);
+      const baseZ = THREE.MathUtils.lerp(cfg.rigPosHip[2], cfg.rigPosAds[2], st.adsBlend);
+      const rotMul = 1 - st.adsBlend;
+
       if (firearmAnimatorRef.current && firearmRestRef.current) {
         applyFirearmAnimPose(
           viewModelRig,
           weaponMount,
           fpsHands,
           firearmRestRef.current,
-          cfg.rigPosHip,
-          cfg.rigRotBase,
+          [baseX, baseY, baseZ + st.recoilZ],
+          [
+            cfg.rigRotBase[0] * rotMul + st.recoilPitch,
+            cfg.rigRotBase[1] * rotMul,
+            cfg.rigRotBase[2] * rotMul,
+          ],
           firearmAnimatorRef.current.update(dt, now)
         );
       } else if (knifeAnimatorRef.current && knifeRestRef.current) {
@@ -1317,8 +1377,12 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
           weaponMount,
           fpsHands,
           knifeRestRef.current,
-          cfg.rigPosHip,
-          cfg.rigRotBase,
+          [baseX, baseY, baseZ + st.recoilZ],
+          [
+            cfg.rigRotBase[0] * rotMul + st.recoilPitch,
+            cfg.rigRotBase[1] * rotMul,
+            cfg.rigRotBase[2] * rotMul,
+          ],
           knifeAnimatorRef.current.update(dt, now)
         );
       }
@@ -1334,7 +1398,7 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
 
         opponentModel.root.position.set(st.oppX, 0, st.oppZ);
         opponentModel.root.rotation.y = st.oppYaw;
-        opponentModel.animate(st.oppIsMoving, st.oppPitch, dt, st.oppHitFlash);
+        opponentModel.animate(st.oppIsMoving, st.oppPitch, dt, st.oppHitFlash, st.oppIsCrouching);
       }
 
       // Send local state over Supabase Realtime (~25Hz)
@@ -1349,6 +1413,7 @@ export const PvpArenaView: React.FC<PvpArenaViewProps> = ({
           pitch: st.pitch,
           isMoving: st.isMoving,
           isMelee: combatProfileRef.current.isMelee,
+          isCrouching: st.isCrouching,
         });
       }
 
